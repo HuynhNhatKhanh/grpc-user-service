@@ -157,3 +157,11 @@ clean:
 	rm -rf bin
 	rm -f coverage.out coverage.html
 	rm -f buf.lock
+
+# Code quality commands
+lint: 
+	golangci-lint run ./...
+
+# Code formatter
+format:
+	gofmt -s -w .
