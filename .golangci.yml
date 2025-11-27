@@ -1,0 +1,49 @@
+version: "2" # Required by golangci-lint v2 config schema
+
+run:
+  timeout: 5m # Enough time for image/video pipelines
+  tests: true # Also lint test files
+  concurrency: 4 # Run linters in parallel
+
+linters:
+  enable:
+    - errcheck # Ensure all errors are handled
+    - govet # Detect suspicious constructs/bugs
+    - staticcheck # Advanced checks: correctness, performance, dead code
+    - gosec # Security checks: file paths, unsafe ops
+    - revive # Style & best practices
+    - gocyclo # Flag overly complex functions
+    - goconst # Detect repeated constants
+    - dupl # Detect duplicated code blocks
+    - ineffassign # Detect unused assignments
+    - unused # Detect unused vars/functions
+    - unparam # Detect unused function params
+    - wastedassign # Detect overwritten assignments
+    - dogsled # Detect multiple blank assignments
+    - misspell # Detect typos in comments/strings
+    - whitespace # Detect extra or missing whitespace
+    - nakedret # Warn on naked returns
+    - noctx # Detect missing context in functions
+    - nolintlint # Check proper usage of //nolint
+
+  settings:
+    gocyclo:
+      min-complexity: 15 # Functions above this complexity are flagged
+
+    revive:
+      rules:
+        - name: exported # Exported items should have Godoc
+        - name: indent-error-flow # Consistent error indentation
+        - name: early-return # Suggest early returns to reduce nesting
+        - name: empty-lines # Ensure proper spacing
+        - name: unexported-return # Warn on inconsistent returns
+
+    gosec:
+      excludes:
+        - G304 # Ignore expected file-read warnings in uploads
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  # new: true # Only fail on newly introduced issues
+  new: false

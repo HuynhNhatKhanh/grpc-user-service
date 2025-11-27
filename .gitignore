@@ -1,0 +1,41 @@
+bin/*
+*.env
+*.env.test
+private.pem
+public.pem
+*.log
+
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# TLS Certificates (sensitive)
+certs/*.key
+certs/*.crt
+certs/*.csr
+certs/*.pem
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+coverage.out
+coverage.html
+.keep
+
+# Mac
+.DS_Store
+
+# Vim
+*.swp
+*.swo
+
+# JetBrains
+.idea
+
+# Proto / gRPC external
+third_party/
