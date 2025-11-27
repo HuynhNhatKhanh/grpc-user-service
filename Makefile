@@ -28,3 +28,11 @@ clean-proto:
 
 # Regenerate all proto files
 regen-proto: clean-proto proto
+
+# Code quality commands
+lint: 
+	golangci-lint run ./...
+
+# Code formatter
+format:
+	gofmt -s -w .

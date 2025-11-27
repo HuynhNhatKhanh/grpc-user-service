@@ -2,26 +2,49 @@ package user
 
 import (
 	"context"
-	"grpc-user-service/internal/domain/user"
+	"errors"
+	domain "grpc-user-service/internal/domain/user"
 )
 
-type UserRepository interface {
-	Create(ctx context.Context, u *user.User) (int64, error)
-	GetByID(ctx context.Context, id int64) (*user.User, error)
+// Repository defines the interface for user data access
+type Repository interface {
+	Create(ctx context.Context, u *domain.User) (int64, error)
+	GetByID(ctx context.Context, id int64) (*domain.User, error)
 }
 
-type UserUsecase struct {
-	repo UserRepository
+// Usecase implements the user business logic
+type Usecase struct {
+	repo Repository
 }
 
-func NewUserUsecase(r UserRepository) *UserUsecase {
-	return &UserUsecase{repo: r}
+// New creates a new user usecase
+func New(r Repository) *Usecase {
+	return &Usecase{repo: r}
 }
 
-func (u *UserUsecase) CreateUser(ctx context.Context, uEntity *user.User) (int64, error) {
-	return u.repo.Create(ctx, uEntity)
+// CreateUser creates a new user with validation
+func (uc *Usecase) CreateUser(ctx context.Context, name, email string) (int64, error) {
+	// Validate input
+	if name == "" {
+		return 0, errors.New("name is required")
+	}
+	if email == "" {
+		return 0, errors.New("email is required")
+	}
+
+	// Business logic: create user
+	return uc.repo.Create(ctx, &domain.User{
+		Name:  name,
+		Email: email,
+	})
 }
 
-func (u *UserUsecase) GetUser(ctx context.Context, id int64) (*user.User, error) {
-	return u.repo.GetByID(ctx, id)
+// GetUser retrieves a user by ID
+func (uc *Usecase) GetUser(ctx context.Context, id int64) (*domain.User, error) {
+	// Validate input
+	if id <= 0 {
+		return nil, errors.New("invalid user id")
+	}
+
+	return uc.repo.GetByID(ctx, id)
 }
