@@ -102,21 +102,20 @@ grpc-user-service/
 │   │   └── cache/                # Cache implementations
 │   │       └── redis/            # Redis cache
 │   │
-│   ├── repository/               # Repository interfaces
-│   │   └── user_repository.go
-│   │
 │   └── server/                   # Server setup & lifecycle
 │       ├── grpc.go               # gRPC server
 │       └── gateway.go            # gRPC-Gateway (REST)
 │
 ├── deployments/                  # Deployment configurations
-│   ├── docker/
-│   │   └── Dockerfile
+│   ├── Dockerfile
 │   ├── docker-compose.yml
 │   └── migrations/               # Database migrations
 │
 ├── scripts/                      # Build & utility scripts
 ├── tests/                        # Integration & E2E tests
+├── buf.yaml
+├── buf.gen.yaml
+├── .golangci.yml
 └── go.mod
 ```
 

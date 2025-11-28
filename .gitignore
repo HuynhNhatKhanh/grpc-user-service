@@ -37,5 +37,10 @@ coverage.html
 # JetBrains
 .idea
 
-# Proto / gRPC external
+# Proto / gRPC generated files
+api/gen/
 third_party/
+
+# Buf
+.buf/
+buf.lock
