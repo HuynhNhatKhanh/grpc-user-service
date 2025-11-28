@@ -1,0 +1,62 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: grpc-user-service-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: grpc_user_service
+      POSTGRES_INITDB_ARGS: "-A md5"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d
+    networks:
+      - grpc-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # gRPC User Service
+  grpc-user-service:
+    build:
+      context: ..
+      dockerfile: deployments/Dockerfile
+    container_name: grpc-user-service-app
+    restart: unless-stopped
+    environment:
+      DB_HOST: "postgres"
+      DB_PORT: "5432"
+      DB_USER: "postgres"
+      DB_PASSWORD: "postgres"
+      DB_NAME: "grpc_user_service"
+      DB_SSLMODE: "disable"
+      GRPC_PORT: "50051"
+      HTTP_PORT: "8080"
+    ports:
+      - "50051:50051"  # gRPC port
+      - "8080:8080"    # HTTP gateway port
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - grpc-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  grpc-network:
+    driver: bridge

@@ -1,0 +1,48 @@
+# Git
+.git
+.gitignore
+
+# Development files
+*.env
+*.env.test
+*.log
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+
+# Testing
+coverage.out
+coverage.html
+
+# Documentation
+README.md
+LICENSE
+*.md
+
+# Buf
+.buf/
+buf.lock
+
+# Docker
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Proto / gRPC generated files
+api/gen/
+third_party/
+
+# Buf
+.buf/
+buf.lock
