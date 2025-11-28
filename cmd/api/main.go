@@ -8,6 +8,7 @@ import (
 	grpcadapter "grpc-user-service/internal/adapter/grpc"
 	"grpc-user-service/internal/config"
 	"grpc-user-service/internal/usecase/user"
+	"grpc-user-service/pkg/logger"
 	"log"
 	"net"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	pgdriver "gorm.io/driver/postgres"
@@ -28,7 +30,7 @@ func main() {
 }
 
 func run() error {
-	// Load Configuration
+	// Load Configuration first (to get APP_ENV for logger)
 	configPath := os.Getenv("CONFIG_PATH")
 	if configPath == "" {
 		configPath = "."
@@ -36,30 +38,69 @@ func run() error {
 
 	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
+		// Fallback to basic logger if config fails
+		log.Fatalf("failed to load config: %v", err)
 	}
 
-	// Database connection
-	db, err := gorm.Open(pgdriver.Open(cfg.DB.DSN()), &gorm.Config{})
+	// Initialize Logger with configuration
+	env := os.Getenv("APP_ENV")
+	if env == "" {
+		env = "development"
+	}
+
+	loggerCfg := logger.Config{
+		Level:            cfg.Logger.Level,
+		Format:           cfg.Logger.Format,
+		OutputPath:       cfg.Logger.OutputPath,
+		SlowQuerySeconds: cfg.Logger.SlowQuerySeconds,
+		EnableSampling:   cfg.Logger.EnableSampling,
+		ServiceName:      cfg.Logger.ServiceName,
+		ServiceVersion:   cfg.Logger.ServiceVersion,
+		Environment:      env,
+	}
+
+	l, err := logger.NewWithConfig(loggerCfg)
 	if err != nil {
-		return fmt.Errorf("failed to connect to database: %w", err)
+		return fmt.Errorf("failed to initialize logger: %w", err)
+	}
+	defer l.Sync() // flushes buffer, if any
+
+	l.Info("starting application",
+		zap.String("service", cfg.Logger.ServiceName),
+		zap.String("version", cfg.Logger.ServiceVersion),
+		zap.String("environment", env),
+	)
+
+	// Database connection with configured GORM logger
+	gormLogger := logger.NewGormLoggerWithConfig(l, cfg.Logger.SlowQuerySeconds, cfg.Logger.Level)
+	db, err := gorm.Open(pgdriver.Open(cfg.DB.DSN()), &gorm.Config{
+		Logger: gormLogger,
+	})
+	if err != nil {
+		l.Fatal("failed to connect to database", zap.Error(err))
 	}
 
-	repo := postgres.NewUserRepoPG(db)
-	uc := user.New(repo)
+	l.Info("database connected successfully")
 
-	grpcServer := grpc.NewServer()
-	pb.RegisterUserServiceServer(grpcServer, grpcadapter.NewUserServiceServer(uc))
+	repo := postgres.NewUserRepoPG(db, l)
+	uc := user.New(repo, l)
+
+	// Create gRPC server with request ID interceptor
+	grpcServer := grpc.NewServer(
+		grpc.UnaryInterceptor(logger.RequestIDInterceptor()),
+	)
+	pb.RegisterUserServiceServer(grpcServer, grpcadapter.NewUserServiceServer(uc, l))
 
 	lc := net.ListenConfig{}
 	go func() {
+
 		lis, err := lc.Listen(context.Background(), "tcp", ":"+cfg.App.GRPCPort)
 		if err != nil {
-			log.Fatalf("failed to listen: %v", err)
+			l.Fatal("failed to listen", zap.Error(err))
 		}
-		log.Printf("gRPC server running on :%s", cfg.App.GRPCPort)
+		l.Info("gRPC server running", zap.String("port", cfg.App.GRPCPort))
 		if err := grpcServer.Serve(lis); err != nil {
-			log.Fatalf("failed to serve: %v", err)
+			l.Fatal("failed to serve", zap.Error(err))
 		}
 	}()
 
@@ -71,10 +112,10 @@ func run() error {
 		[]grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())},
 	)
 	if err != nil {
-		return fmt.Errorf("failed to register gateway: %w", err)
+		l.Fatal("failed to register gateway", zap.Error(err))
 	}
 
-	log.Printf("REST gateway running on :%s", cfg.App.HTTPPort)
+	l.Info("REST gateway running", zap.String("port", cfg.App.HTTPPort))
 
 	srv := &http.Server{
 		Addr:    ":" + cfg.App.HTTPPort,

@@ -9,8 +9,9 @@ import (
 
 // Config holds all configuration for the application
 type Config struct {
-	DB  DatabaseConfig
-	App AppConfig
+	DB     DatabaseConfig
+	App    AppConfig
+	Logger LoggerConfig
 }
 
 // DatabaseConfig holds configuration for the database
@@ -27,6 +28,17 @@ type DatabaseConfig struct {
 type AppConfig struct {
 	GRPCPort string `mapstructure:"GRPC_PORT"`
 	HTTPPort string `mapstructure:"HTTP_PORT"`
+}
+
+// LoggerConfig holds configuration for the logger
+type LoggerConfig struct {
+	Level            string  `mapstructure:"LOG_LEVEL"`
+	Format           string  `mapstructure:"LOG_FORMAT"`
+	OutputPath       string  `mapstructure:"LOG_OUTPUT_PATH"`
+	SlowQuerySeconds float64 `mapstructure:"LOG_SLOW_QUERY_SECONDS"`
+	EnableSampling   bool    `mapstructure:"LOG_ENABLE_SAMPLING"`
+	ServiceName      string  `mapstructure:"SERVICE_NAME"`
+	ServiceVersion   string  `mapstructure:"SERVICE_VERSION"`
 }
 
 // LoadConfig reads configuration from file or environment variables.
@@ -76,6 +88,22 @@ func setDefaults() {
 
 	viper.SetDefault("GRPC_PORT", "50051")
 	viper.SetDefault("HTTP_PORT", "8080")
+
+	// Logger defaults
+	env := viper.GetString("APP_ENV")
+	if env == "production" {
+		viper.SetDefault("LOG_LEVEL", "info")
+		viper.SetDefault("LOG_FORMAT", "json")
+		viper.SetDefault("LOG_ENABLE_SAMPLING", true)
+	} else {
+		viper.SetDefault("LOG_LEVEL", "debug")
+		viper.SetDefault("LOG_FORMAT", "console")
+		viper.SetDefault("LOG_ENABLE_SAMPLING", false)
+	}
+	viper.SetDefault("LOG_OUTPUT_PATH", "stdout")
+	viper.SetDefault("LOG_SLOW_QUERY_SECONDS", 0.2)
+	viper.SetDefault("SERVICE_NAME", "grpc-user-service")
+	viper.SetDefault("SERVICE_VERSION", "1.0.0")
 }
 
 // DSN returns the PostgreSQL Data Source Name

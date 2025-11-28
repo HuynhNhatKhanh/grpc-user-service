@@ -407,6 +407,139 @@ curl -X POST http://localhost:8080/v1/users \
   -d '{"name": "John Doe", "email": "john@example.com"}'
 ```
 
+## 📝 Logging
+
+Production-ready structured logging with **Zap** featuring environment-based configuration, request tracking, and GORM query logging.
+
+### Features
+
+- **Environment-based configuration** - Different settings for development/production
+- **Log rotation** - Automatic file rotation with compression (Lumberjack)
+- **Sampling** - Reduce log volume in production
+- **Request ID tracking** - Trace requests across the entire flow
+- **GORM query logging** - All SQL queries with performance metrics
+- **Slow query detection** - Configurable threshold for slow queries
+- **Default fields** - Service name, version, environment auto-added
+- **Structured fields** - JSON format for log aggregators
+
+### Configuration
+
+All logging behavior is controlled via environment variables:
+
+```env
+# Logger Configuration
+LOG_LEVEL=debug                    # debug, info, warn, error
+LOG_FORMAT=console                 # console or json
+LOG_OUTPUT_PATH=stdout             # stdout, stderr, or file path
+LOG_SLOW_QUERY_SECONDS=0.2        # Slow query threshold (200ms)
+LOG_ENABLE_SAMPLING=false         # Enable sampling (recommended for production)
+SERVICE_NAME=grpc-user-service
+SERVICE_VERSION=1.0.0
+```
+
+### Log Levels
+
+| Level   | Development | Production | Use Case                    |
+| ------- | ----------- | ---------- | --------------------------- |
+| `debug` | ✅ Default  | ❌         | All queries, verbose output |
+| `info`  | ✅          | ✅ Default | Normal operations           |
+| `warn`  | ✅          | ✅         | Slow queries, deprecations  |
+| `error` | ✅          | ✅         | Errors only                 |
+
+### Example Output
+
+**Development (Console format):**
+
+```
+2025-11-28T16:40:47.938+0700    info    api/main.go:68  starting application
+    {"service": "grpc-user-service", "version": "1.0.0", "environment": "development"}
+
+2025-11-28T16:40:48.123+0700    info    pkg/logger/gorm.go:134  gorm query
+    {"service": "grpc-user-service", "request_id": "550e8400-e29b-41d4-a716-446655440000",
+     "sql": "SELECT * FROM users WHERE id = $1", "rows": 1, "elapsed": "15.2ms"}
+
+2025-11-28T16:40:48.456+0700    warn    pkg/logger/gorm.go:130  gorm slow query
+    {"service": "grpc-user-service", "request_id": "550e8400-e29b-41d4-a716-446655440001",
+     "sql": "SELECT * FROM users JOIN orders...", "elapsed": "250ms", "threshold": "200ms"}
+```
+
+**Production (JSON format):**
+
+```json
+{
+  "level": "info",
+  "timestamp": "2025-11-28T16:40:47.938+0700",
+  "caller": "api/main.go:68",
+  "message": "starting application",
+  "service": "grpc-user-service",
+  "version": "1.0.0",
+  "environment": "production"
+}
+```
+
+### Request ID Tracking
+
+Every gRPC request automatically gets a unique request ID:
+
+```go
+// Automatic via middleware
+grpc.NewServer(
+    grpc.UnaryInterceptor(logger.RequestIDInterceptor()),
+)
+```
+
+All logs related to the same request share the same `request_id`, making it easy to trace the entire request flow.
+
+### GORM Query Logging
+
+**All database queries are logged with:**
+
+- SQL statement (truncated if > 1000 chars)
+- Rows affected
+- Execution time (ms)
+- Request ID (if available)
+- Slow query warnings
+
+**Configuration:**
+
+```env
+LOG_LEVEL=info                # See all queries
+LOG_SLOW_QUERY_SECONDS=0.1   # Warn if query > 100ms
+```
+
+### Log Rotation
+
+For file output, logs automatically rotate:
+
+```env
+LOG_OUTPUT_PATH=/var/log/grpc-user-service.log
+```
+
+- **Max size**: 100MB per file
+- **Max backups**: 3 files
+- **Max age**: 28 days
+- **Compression**: Automatic `.gz` compression
+
+### Production Best Practices
+
+```env
+# Production settings
+APP_ENV=production
+LOG_LEVEL=info
+LOG_FORMAT=json
+LOG_OUTPUT_PATH=/var/log/app.log
+LOG_ENABLE_SAMPLING=true
+```
+
+**Why JSON format?** Easy integration with:
+
+- ELK Stack (Elasticsearch, Logstash, Kibana)
+- Datadog
+- Splunk
+- CloudWatch Logs
+
+**Why sampling?** Reduces log volume by ~90% while keeping first 100 entries/second and 1/10 thereafter.
+
 ## 🧪 Testing
 
 ```bash
@@ -462,9 +595,9 @@ migrate -path deployments/migrations -database "postgres://user:pass@localhost:5
 
 - [x] Clean Architecture foundation
 - [x] gRPC + gRPC-Gateway
+- [x] Structured logging (Zap with production features)
 - [ ] Redis caching layer
 - [ ] PostgreSQL repository implementation
-- [ ] Structured logging (zap/zerolog)
 - [ ] Distributed tracing (OpenTelemetry)
 - [ ] Metrics (Prometheus)
 - [ ] Docker Compose setup
