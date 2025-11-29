@@ -9,9 +9,11 @@ import (
 // Config holds all configuration parameters for the application.
 // It includes database, application server, and logger configurations.
 type Config struct {
-	DB     DatabaseConfig // Database connection settings
-	App    AppConfig      // Application server settings
-	Logger LoggerConfig   // Logger configuration
+	DB        DatabaseConfig  // Database connection settings
+	App       AppConfig       // Application server settings
+	Logger    LoggerConfig    // Logger configuration
+	Redis     RedisConfig     // Redis connection settings
+	RateLimit RateLimitConfig // Rate limiting configuration
 }
 
 // DatabaseConfig holds configuration parameters for database connection.
@@ -42,6 +44,27 @@ type LoggerConfig struct {
 	EnableSampling   bool    `mapstructure:"LOG_ENABLE_SAMPLING"`    // Enable log sampling for high traffic
 	ServiceName      string  `mapstructure:"SERVICE_NAME"`           // Service name for log identification
 	ServiceVersion   string  `mapstructure:"SERVICE_VERSION"`        // Service version for log identification
+}
+
+// RedisConfig holds configuration parameters for Redis connection.
+// These settings are used to establish connection with Redis for caching and rate limiting.
+type RedisConfig struct {
+	Host        string `mapstructure:"REDIS_HOST"`              // Redis server host
+	Port        string `mapstructure:"REDIS_PORT"`              // Redis server port
+	Password    string `mapstructure:"REDIS_PASSWORD"`          // Redis password (empty for no auth)
+	DB          int    `mapstructure:"REDIS_DB"`                // Redis database number
+	CacheTTL    int    `mapstructure:"REDIS_CACHE_TTL_SECONDS"` // Cache TTL in seconds
+	MaxRetries  int    `mapstructure:"REDIS_MAX_RETRIES"`       // Maximum number of retries
+	PoolSize    int    `mapstructure:"REDIS_POOL_SIZE"`         // Connection pool size
+	MinIdleConn int    `mapstructure:"REDIS_MIN_IDLE_CONN"`     // Minimum idle connections
+}
+
+// RateLimitConfig holds configuration parameters for rate limiting.
+// It controls how many requests are allowed per time window.
+type RateLimitConfig struct {
+	RequestsPerSecond float64 `mapstructure:"RATE_LIMIT_REQUESTS_PER_SECOND"` // Maximum requests per second
+	WindowSeconds     int     `mapstructure:"RATE_LIMIT_WINDOW_SECONDS"`      // Time window in seconds
+	Enabled           bool    `mapstructure:"RATE_LIMIT_ENABLED"`             // Enable/disable rate limiting
 }
 
 // LoadConfig reads configuration from file or environment variables.
@@ -87,6 +110,19 @@ func LoadConfig(path string) (*Config, error) {
 	config.Logger.ServiceName = viper.GetString("SERVICE_NAME")
 	config.Logger.ServiceVersion = viper.GetString("SERVICE_VERSION")
 
+	config.Redis.Host = viper.GetString("REDIS_HOST")
+	config.Redis.Port = viper.GetString("REDIS_PORT")
+	config.Redis.Password = viper.GetString("REDIS_PASSWORD")
+	config.Redis.DB = viper.GetInt("REDIS_DB")
+	config.Redis.CacheTTL = viper.GetInt("REDIS_CACHE_TTL_SECONDS")
+	config.Redis.MaxRetries = viper.GetInt("REDIS_MAX_RETRIES")
+	config.Redis.PoolSize = viper.GetInt("REDIS_POOL_SIZE")
+	config.Redis.MinIdleConn = viper.GetInt("REDIS_MIN_IDLE_CONN")
+
+	config.RateLimit.RequestsPerSecond = viper.GetFloat64("RATE_LIMIT_REQUESTS_PER_SECOND")
+	config.RateLimit.WindowSeconds = viper.GetInt("RATE_LIMIT_WINDOW_SECONDS")
+	config.RateLimit.Enabled = viper.GetBool("RATE_LIMIT_ENABLED")
+
 	return &config, nil
 }
 
@@ -118,6 +154,21 @@ func setDefaults() {
 	viper.SetDefault("LOG_SLOW_QUERY_SECONDS", 0.2)
 	viper.SetDefault("SERVICE_NAME", "grpc-user-service")
 	viper.SetDefault("SERVICE_VERSION", "1.0.0")
+
+	// Redis defaults
+	viper.SetDefault("REDIS_HOST", "localhost")
+	viper.SetDefault("REDIS_PORT", "6379")
+	viper.SetDefault("REDIS_PASSWORD", "")
+	viper.SetDefault("REDIS_DB", 0)
+	viper.SetDefault("REDIS_CACHE_TTL_SECONDS", 300) // 5 minutes
+	viper.SetDefault("REDIS_MAX_RETRIES", 3)
+	viper.SetDefault("REDIS_POOL_SIZE", 10)
+	viper.SetDefault("REDIS_MIN_IDLE_CONN", 5)
+
+	// Rate limit defaults
+	viper.SetDefault("RATE_LIMIT_REQUESTS_PER_SECOND", 10.0)
+	viper.SetDefault("RATE_LIMIT_WINDOW_SECONDS", 1)
+	viper.SetDefault("RATE_LIMIT_ENABLED", true)
 }
 
 // DSN returns the PostgreSQL Data Source Name string.

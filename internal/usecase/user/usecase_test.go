@@ -58,7 +58,7 @@ func (m *MockRepository) List(ctx context.Context, query string, page, limit int
 func setupTestUsecase(t *testing.T) (*Usecase, *MockRepository) {
 	mockRepo := new(MockRepository)
 	logger := zaptest.NewLogger(t)
-	uc := New(mockRepo, logger)
+	uc := New(mockRepo, nil, logger) // nil cache for unit tests
 	return uc, mockRepo
 }
 

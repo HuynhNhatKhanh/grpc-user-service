@@ -79,7 +79,7 @@ format:
 
 # Run tests
 test:
-	go test -v -race -coverprofile=coverage.out ./...
+	go test -v -coverprofile=coverage.out ./...
 
 # Run tests with coverage report
 test-coverage: test

@@ -13,7 +13,6 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      # - ./migrations:/docker-entrypoint-initdb.d
     networks:
       - grpc-network
     healthcheck:
@@ -21,6 +20,41 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: redis-grpc
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - grpc-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    command: redis-server --appendonly yes
+
+  # Database Migration
+  migrate:
+    image: migrate/migrate:latest
+    container_name: migrate-grpc
+    networks:
+      - grpc-network
+    volumes:
+      - ./migrations:/migrations
+    command: 
+      - "-path=/migrations"
+      - "-database=postgres://postgres:postgres@postgres:5432/grpc_user_service?sslmode=disable"
+      - "up"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: on-failure
 
   # gRPC User Service
   grpc-user-service:
@@ -38,16 +72,37 @@ services:
       DB_SSLMODE: "disable"
       GRPC_PORT: "50051"
       HTTP_PORT: "8080"
+      # Redis Configuration
+      REDIS_HOST: "redis"
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ""
+      REDIS_DB: "0"
+      REDIS_CACHE_TTL_SECONDS: "300"
+      REDIS_MAX_RETRIES: "3"
+      REDIS_POOL_SIZE: "10"
+      REDIS_MIN_IDLE_CONN: "5"
+      # Rate Limiting
+      RATE_LIMIT_REQUESTS_PER_SECOND: "10.0"
+      RATE_LIMIT_WINDOW_SECONDS: "1"
+      RATE_LIMIT_ENABLED: "true"
+      # Logging
+      LOG_LEVEL: "info"
+      LOG_FORMAT: "json"
+      APP_ENV: "production"
     ports:
       - "50051:50051"  # gRPC port
       - "8080:8080"    # HTTP gateway port
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     networks:
       - grpc-network
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/v1/users?page=1&limit=1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -55,6 +110,8 @@ services:
 
 volumes:
   postgres_data:
+    driver: local
+  redis_data:
     driver: local
 
 networks:

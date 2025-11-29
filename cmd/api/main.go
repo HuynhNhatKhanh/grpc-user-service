@@ -4,11 +4,14 @@ import (
 	"context"
 	"fmt"
 	pb "grpc-user-service/api/gen/go/user"
+	"grpc-user-service/internal/adapter/cache"
 	"grpc-user-service/internal/adapter/db/postgres"
 	grpcadapter "grpc-user-service/internal/adapter/grpc"
+	"grpc-user-service/internal/adapter/grpc/middleware"
 	"grpc-user-service/internal/config"
 	"grpc-user-service/internal/usecase/user"
 	"grpc-user-service/pkg/logger"
+	redisclient "grpc-user-service/pkg/redis"
 	"log"
 	"net"
 	"net/http"
@@ -89,12 +92,55 @@ func run() error {
 
 	l.Info("database connected successfully")
 
-	repo := postgres.NewUserRepoPG(db, l)
-	uc := user.New(repo, l)
+	// Initialize Redis client
+	redisConfig := redisclient.Config{
+		Host:        cfg.Redis.Host,
+		Port:        cfg.Redis.Port,
+		Password:    cfg.Redis.Password,
+		DB:          cfg.Redis.DB,
+		MaxRetries:  cfg.Redis.MaxRetries,
+		PoolSize:    cfg.Redis.PoolSize,
+		MinIdleConn: cfg.Redis.MinIdleConn,
+	}
 
-	// Create gRPC server with request ID interceptor
+	rdb, err := redisclient.NewClient(redisConfig, l)
+	if err != nil {
+		l.Fatal("failed to connect to Redis", zap.Error(err))
+	}
+	defer func() {
+		if err := rdb.Close(); err != nil {
+			l.Error("failed to close Redis connection", zap.Error(err))
+		}
+	}()
+
+	// Initialize cache
+	userCache := cache.NewRedisUserCache(
+		rdb.Client,
+		time.Duration(cfg.Redis.CacheTTL)*time.Second,
+		l,
+	)
+
+	// Initialize repository and usecase with cache
+	repo := postgres.NewUserRepoPG(db, l)
+	uc := user.New(repo, userCache, l)
+
+	// Create rate limiter
+	rateLimiter := middleware.NewRateLimiter(
+		rdb.Client,
+		middleware.RateLimiterConfig{
+			RequestsPerSecond: cfg.RateLimit.RequestsPerSecond,
+			WindowSeconds:     cfg.RateLimit.WindowSeconds,
+			Enabled:           cfg.RateLimit.Enabled,
+		},
+		l,
+	)
+
+	// Create gRPC server with request ID and rate limit interceptors
 	grpcServer := grpc.NewServer(
-		grpc.UnaryInterceptor(logger.RequestIDInterceptor()),
+		grpc.ChainUnaryInterceptor(
+			logger.RequestIDInterceptor(),
+			rateLimiter.UnaryInterceptor(),
+		),
 	)
 	pb.RegisterUserServiceServer(grpcServer, grpcadapter.NewUserServiceServer(uc, l))
 

@@ -2,8 +2,11 @@ package grpc
 
 import (
 	"context"
+	"strings"
 
 	"go.uber.org/zap"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	pb "grpc-user-service/api/gen/go/user"
 	"grpc-user-service/internal/usecase/user"
@@ -21,6 +24,30 @@ func NewUserServiceServer(uc *user.Usecase, log *zap.Logger) *UserServiceServer 
 	return &UserServiceServer{uc: uc, log: log}
 }
 
+// mapError converts domain errors to gRPC status errors
+func mapError(err error) error {
+	if err == nil {
+		return nil
+	}
+	// Check for validation errors
+	if strings.Contains(err.Error(), "validation failed") {
+		return status.Error(codes.InvalidArgument, err.Error())
+	}
+	// Check for "already exists" errors
+	if strings.Contains(err.Error(), "already exists") {
+		return status.Error(codes.AlreadyExists, err.Error())
+	}
+	// Check for "not found" errors
+	if strings.Contains(err.Error(), "not found") {
+		return status.Error(codes.NotFound, err.Error())
+	}
+	// Check for "invalid" errors
+	if strings.Contains(err.Error(), "invalid") {
+		return status.Error(codes.InvalidArgument, err.Error())
+	}
+	return err
+}
+
 // CreateUser handles the gRPC CreateUser request.
 func (s *UserServiceServer) CreateUser(ctx context.Context, req *pb.CreateUserRequest) (*pb.CreateUserResponse, error) {
 	s.log.Info("gRPC CreateUser request", zap.String("name", req.Name), zap.String("email", req.Email))
@@ -31,7 +58,7 @@ func (s *UserServiceServer) CreateUser(ctx context.Context, req *pb.CreateUserRe
 	id, err := s.uc.CreateUser(ctx, ucRequest)
 	if err != nil {
 		s.log.Error("gRPC CreateUser failed", zap.Error(err))
-		return nil, err
+		return nil, mapError(err)
 	}
 
 	return &pb.CreateUserResponse{
@@ -50,7 +77,7 @@ func (s *UserServiceServer) UpdateUser(ctx context.Context, req *pb.UpdateUserRe
 	id, err := s.uc.UpdateUser(ctx, ucRequest)
 	if err != nil {
 		s.log.Error("gRPC UpdateUser failed", zap.Error(err))
-		return nil, err
+		return nil, mapError(err)
 	}
 
 	return &pb.UpdateUserResponse{
@@ -67,7 +94,7 @@ func (s *UserServiceServer) DeleteUser(ctx context.Context, req *pb.DeleteUserRe
 	id, err := s.uc.DeleteUser(ctx, ucRequest)
 	if err != nil {
 		s.log.Error("gRPC DeleteUser failed", zap.Error(err))
-		return nil, err
+		return nil, mapError(err)
 	}
 
 	return &pb.DeleteUserResponse{
@@ -84,7 +111,7 @@ func (s *UserServiceServer) GetUser(ctx context.Context, req *pb.GetUserRequest)
 	u, err := s.uc.GetUser(ctx, ucRequest)
 	if err != nil {
 		s.log.Error("gRPC GetUser failed", zap.Error(err))
-		return nil, err
+		return nil, mapError(err)
 	}
 
 	return &pb.GetUserResponse{
@@ -105,7 +132,7 @@ func (s *UserServiceServer) ListUsers(ctx context.Context, req *pb.ListUsersRequ
 	usersResponse, err := s.uc.ListUsers(ctx, ucRequest)
 	if err != nil {
 		s.log.Error("gRPC ListUsers failed", zap.Error(err))
-		return nil, err
+		return nil, mapError(err)
 	}
 
 	pbUsers := make([]*pb.GetUserResponse, len(usersResponse.Users))

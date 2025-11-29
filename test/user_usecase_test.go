@@ -61,7 +61,7 @@ func (m *ComprehensiveMockRepository) List(ctx context.Context, query string, pa
 func setupComprehensiveTestUsecase(t *testing.T) (*grpcuser.Usecase, *ComprehensiveMockRepository) {
 	mockRepo := new(ComprehensiveMockRepository)
 	logger := zaptest.NewLogger(t)
-	uc := grpcuser.New(mockRepo, logger)
+	uc := grpcuser.New(mockRepo, nil, logger) // nil cache for unit tests
 	return uc, mockRepo
 }
 
