@@ -7,17 +7,60 @@ option go_package = "grpc-user-service/api/gen/go/user";
 import "google/api/annotations.proto";
 
 service UserService {
-  rpc GetUser(GetUserRequest) returns (GetUserResponse) {
-    option (google.api.http) = {
-      get: "/v1/users/{id}"
-    };
-  }
   rpc CreateUser(CreateUserRequest) returns (CreateUserResponse) {
     option (google.api.http) = {
       post: "/v1/users"
       body: "*"
     };
   }
+  rpc UpdateUser(UpdateUserRequest) returns (UpdateUserResponse) {
+    option (google.api.http) = {
+      put: "/v1/users/{id}"
+      body: "*"
+    };
+  }
+  rpc DeleteUser(DeleteUserRequest) returns (DeleteUserResponse) {
+    option (google.api.http) = {
+      delete: "/v1/users/{id}"
+    };
+  }
+  rpc GetUser(GetUserRequest) returns (GetUserResponse) {
+    option (google.api.http) = {
+      get: "/v1/users/{id}"
+    };
+  }
+  rpc ListUsers(ListUsersRequest) returns (ListUsersResponse) {
+    option (google.api.http) = {
+      get: "/v1/users"
+    };
+  }
+}
+
+message CreateUserRequest {
+  string name = 1;
+  string email = 2;
+}
+
+message CreateUserResponse {
+  int64 id = 1;
+}
+
+message UpdateUserRequest {
+  int64 id = 1;
+  string name = 2;
+  string email = 3;
+}
+
+message UpdateUserResponse {
+  int64 id = 1;
+}
+
+message DeleteUserRequest {
+  int64 id = 1;
+}
+
+message DeleteUserResponse {
+  int64 id = 1;
 }
 
 message GetUserRequest {
@@ -30,11 +73,12 @@ message GetUserResponse {
   string email = 3;
 }
 
-message CreateUserRequest {
-  string name = 1;
-  string email = 2;
+message ListUsersRequest {
+  string query = 1;
+  int64 page = 2;
+  int64 limit = 3;
 }
 
-message CreateUserResponse {
-  int64 id = 1;
+message ListUsersResponse {
+  repeated GetUserResponse users = 1;
 }

@@ -1,4 +1,6 @@
-.PHONY: help install-tools proto clean-proto regen-proto buf-dep-update buf-mod-update lint-proto lint format test run build docker-build docker-up docker-down docker-logs clean migrate-up migrate-down migrate-force migrate-create
+SHELL := bash
+
+.PHONY: help install-tools proto clean-proto regen-proto buf-dep-update buf-mod-update lint-proto lint format test run build version docker-build docker-up docker-down docker-logs clean migrate-up migrate-down migrate-force migrate-create
 
 # Default target - show help
 help:
@@ -23,6 +25,7 @@ help:
 	@echo "  docker-down        - Stop services with docker-compose"
 	@echo "  docker-logs        - Show docker-compose logs"
 	@echo "  clean              - Clean all generated files and binaries"
+	@echo "  local              - Run the application locally"
 
 # Install protoc plugins and tools
 install-tools:
@@ -90,6 +93,9 @@ run:
 build:
 	go build -o bin/grpc-user-service cmd/api/main.go
 
+version:
+	@echo "1.0.0"
+
 # Download Go modules
 deps:
 	go mod download
@@ -98,18 +104,17 @@ deps:
 # Migration commands
 migrate-up:
 	@echo "Applying migrations..."
-	@if [ -z "$(DB_DSN)" ]; then \
-		export DB_DSN="postgres://postgres:postgres@localhost:5432/grpc_user_service?sslmode=disable"; \
-	fi; \
-	migrate -path deployments/migrations -database "$$DB_DSN" up
+	@bash -c 'if [ -z "$$DB_DSN" ]; then export DB_DSN="postgres://postgres:postgres@localhost:5432/grpc_user_service?sslmode=disable"; fi; migrate -path deployments/migrations -database "$$DB_DSN" up'
 	@echo "Migrations applied"
+
+migrate-up-docker:
+	@echo "Applying migrations using Docker..."
+	docker run --rm -v $(CURDIR)/deployments/migrations:/migrations --network host migrate/migrate -path=/migrations/ -database "postgres://postgres:postgres@host.docker.internal:5432/grpc_user_service?sslmode=disable" up
+	@echo "Migrations applied successfully"
 
 migrate-down:
 	@echo "Rolling back last migration..."
-	@if [ -z "$(DB_DSN)" ]; then \
-		export DB_DSN="postgres://postgres:postgres@localhost:5432/grpc_user_service?sslmode=disable"; \
-	fi; \
-	migrate -path deployments/migrations -database "$$DB_DSN" down 1
+	@bash -c 'if [ -z "$$DB_DSN" ]; then export DB_DSN="postgres://postgres:postgres@localhost:5432/grpc_user_service?sslmode=disable"; fi; migrate -path deployments/migrations -database "$$DB_DSN" down 1'
 	@echo "Migration rolled back"
 
 migrate-force:
@@ -118,10 +123,7 @@ migrate-force:
 		exit 1; \
 	fi
 	@echo "Forcing migration version to $(VERSION)..."
-	@if [ -z "$(DB_DSN)" ]; then \
-		export DB_DSN="postgres://postgres:postgres@localhost:5432/grpc_user_service?sslmode=disable"; \
-	fi; \
-	migrate -path deployments/migrations -database "$$DB_DSN" force $(VERSION)
+	@bash -c 'if [ -z "$$DB_DSN" ]; then export DB_DSN="postgres://postgres:postgres@localhost:5432/grpc_user_service?sslmode=disable"; fi; migrate -path deployments/migrations -database "$$DB_DSN" force $(VERSION)'
 	@echo "Migration version set to $(VERSION)"
 
 migrate-create:
@@ -158,10 +160,6 @@ clean:
 	rm -f coverage.out coverage.html
 	rm -f buf.lock
 
-# Code quality commands
-lint: 
-	golangci-lint run ./...
-
-# Code formatter
-format:
-	gofmt -s -w .
+# Run local application	
+local:
+	go run cmd/api/main.go

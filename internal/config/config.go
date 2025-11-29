@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/spf13/viper"
 )
@@ -43,17 +42,14 @@ type LoggerConfig struct {
 
 // LoadConfig reads configuration from file or environment variables.
 func LoadConfig(path string) (*Config, error) {
+	// Set defaults first
+	setDefaults()
+
 	viper.AddConfigPath(path)
 	viper.SetConfigName("app") // Look for app.env
 	viper.SetConfigType("env")
 
 	viper.AutomaticEnv() // Read from environment variables
-
-	// Replace dots with underscores in env variables (e.g. DB.HOST -> DB_HOST)
-	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-
-	// Set defaults
-	setDefaults()
 
 	// Try to read config file
 	if err := viper.ReadInConfig(); err != nil {
@@ -65,15 +61,24 @@ func LoadConfig(path string) (*Config, error) {
 
 	var config Config
 
-	// Bind environment variables manually for nested structs if needed,
-	// or rely on mapstructure tags if using Unmarshal
-	if err := viper.Unmarshal(&config); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
-	}
+	// Manually populate config from viper
+	config.DB.Host = viper.GetString("DB_HOST")
+	config.DB.Port = viper.GetString("DB_PORT")
+	config.DB.User = viper.GetString("DB_USER")
+	config.DB.Password = viper.GetString("DB_PASSWORD")
+	config.DB.Name = viper.GetString("DB_NAME")
+	config.DB.SSLMode = viper.GetString("DB_SSLMODE")
 
-	// Explicitly bind for nested structs if Unmarshal doesn't pick up env vars directly without config file
-	// A common pattern is to flatten the config or use mapstructure tags matching env vars directly
-	// Here we use mapstructure tags in the structs which viper uses.
+	config.App.GRPCPort = viper.GetString("GRPC_PORT")
+	config.App.HTTPPort = viper.GetString("HTTP_PORT")
+
+	config.Logger.Level = viper.GetString("LOG_LEVEL")
+	config.Logger.Format = viper.GetString("LOG_FORMAT")
+	config.Logger.OutputPath = viper.GetString("LOG_OUTPUT_PATH")
+	config.Logger.SlowQuerySeconds = viper.GetFloat64("LOG_SLOW_QUERY_SECONDS")
+	config.Logger.EnableSampling = viper.GetBool("LOG_ENABLE_SAMPLING")
+	config.Logger.ServiceName = viper.GetString("SERVICE_NAME")
+	config.Logger.ServiceVersion = viper.GetString("SERVICE_VERSION")
 
 	return &config, nil
 }

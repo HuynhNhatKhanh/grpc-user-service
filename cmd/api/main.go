@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	httpSwagger "github.com/swaggo/http-swagger/v2"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -63,7 +64,11 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("failed to initialize logger: %w", err)
 	}
-	defer l.Sync() // flushes buffer, if any
+	defer func() {
+		if err := l.Sync(); err != nil {
+			l.Fatal("failed to sync logger", zap.Error(err))
+		}
+	}()
 
 	l.Info("starting application",
 		zap.String("service", cfg.Logger.ServiceName),
@@ -92,8 +97,8 @@ func run() error {
 	pb.RegisterUserServiceServer(grpcServer, grpcadapter.NewUserServiceServer(uc, l))
 
 	lc := net.ListenConfig{}
-	go func() {
 
+	go func() {
 		lis, err := lc.Listen(context.Background(), "tcp", ":"+cfg.App.GRPCPort)
 		if err != nil {
 			l.Fatal("failed to listen", zap.Error(err))
@@ -115,11 +120,28 @@ func run() error {
 		l.Fatal("failed to register gateway", zap.Error(err))
 	}
 
+	// Create main HTTP mux to handle both API and Swagger UI
+	httpMux := http.NewServeMux()
+
+	// Serve the swagger JSON file
+	httpMux.HandleFunc("/swagger/user.swagger.json", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "./api/swagger/user.swagger.json")
+	})
+
+	// Serve Swagger UI
+	httpMux.HandleFunc("/swagger/", httpSwagger.Handler(
+		httpSwagger.URL("/swagger/user.swagger.json"),
+	))
+
+	// Handle all other routes with gRPC Gateway mux
+	httpMux.Handle("/", mux)
+
 	l.Info("REST gateway running", zap.String("port", cfg.App.HTTPPort))
+	l.Info("Swagger UI available at", zap.String("url", "http://localhost:"+cfg.App.HTTPPort+"/swagger/"))
 
 	srv := &http.Server{
 		Addr:    ":" + cfg.App.HTTPPort,
-		Handler: mux,
+		Handler: httpMux,
 		// Good practice: enforce timeouts for servers you create!
 		ReadHeaderTimeout: 2 * time.Second,
 	}

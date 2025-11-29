@@ -2,7 +2,7 @@ services:
   # PostgreSQL Database
   postgres:
     image: postgres:16-alpine
-    container_name: grpc-user-service-db
+    container_name: postgres-grpc
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
@@ -13,7 +13,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./migrations:/docker-entrypoint-initdb.d
+      # - ./migrations:/docker-entrypoint-initdb.d
     networks:
       - grpc-network
     healthcheck:
