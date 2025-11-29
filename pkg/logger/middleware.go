@@ -7,7 +7,9 @@ import (
 	"google.golang.org/grpc"
 )
 
-// RequestIDInterceptor is a gRPC interceptor that adds a request ID to the context
+// RequestIDInterceptor creates a gRPC unary server interceptor that adds a unique request ID to the context.
+// The request ID is generated using UUID v4 and added to the context for traceability.
+// This enables request correlation across logs and helps with debugging distributed systems.
 func RequestIDInterceptor() grpc.UnaryServerInterceptor {
 	return func(
 		ctx context.Context,

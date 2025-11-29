@@ -145,6 +145,9 @@ docker-build:
 docker-up:
 	docker-compose -f deployments/docker-compose.yml up -d
 
+docker-bu:
+	docker-compose -f deployments/docker-compose.yml up -d --build
+
 docker-down:
 	docker-compose -f deployments/docker-compose.yml down
 

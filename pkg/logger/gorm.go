@@ -10,15 +10,17 @@ import (
 	gormlogger "gorm.io/gorm/logger"
 )
 
-// GormLogger is a custom logger for GORM that uses zap
+// GormLogger is a custom GORM logger implementation that uses zap for structured logging.
+// It provides context-aware database query logging with slow query detection.
 type GormLogger struct {
-	ZapLogger     *zap.Logger
-	SlowThreshold time.Duration
-	LogLevel      gormlogger.LogLevel
+	ZapLogger     *zap.Logger         // Underlying zap logger for structured logging
+	SlowThreshold time.Duration       // Threshold for slow query detection
+	LogLevel      gormlogger.LogLevel // Minimum log level for GORM operations
 }
 
-// NewGormLogger creates a new GORM logger with zap
-// Deprecated: Use NewGormLoggerWithConfig for better control
+// NewGormLogger creates a new GORM logger with default configuration.
+// It uses zap as the underlying logger with a 200ms slow query threshold.
+// Deprecated: Use NewGormLoggerWithConfig for better configuration control.
 func NewGormLogger(zapLogger *zap.Logger) *GormLogger {
 	return &GormLogger{
 		ZapLogger:     zapLogger,
@@ -27,7 +29,8 @@ func NewGormLogger(zapLogger *zap.Logger) *GormLogger {
 	}
 }
 
-// NewGormLoggerWithConfig creates a new GORM logger with configuration
+// NewGormLoggerWithConfig creates a new GORM logger with custom configuration.
+// It allows setting custom slow query threshold and log level based on string input.
 func NewGormLoggerWithConfig(zapLogger *zap.Logger, slowQuerySeconds float64, logLevel string) *GormLogger {
 	// Parse log level
 	var level gormlogger.LogLevel
@@ -53,14 +56,16 @@ func NewGormLoggerWithConfig(zapLogger *zap.Logger, slowQuerySeconds float64, lo
 	}
 }
 
-// LogMode implements gormlogger.Interface
+// LogMode sets the log level for the GORM logger and returns a new instance.
+// This implements the gormlogger.Interface for dynamic log level changes.
 func (l *GormLogger) LogMode(level gormlogger.LogLevel) gormlogger.Interface {
 	newLogger := *l
 	newLogger.LogLevel = level
 	return &newLogger
 }
 
-// Info implements gormlogger.Interface
+// Info logs informational messages from GORM operations.
+// It includes context information like request ID if available.
 func (l *GormLogger) Info(ctx context.Context, msg string, data ...interface{}) {
 	if l.LogLevel >= gormlogger.Info {
 		logger := WithContext(ctx, l.ZapLogger)
@@ -68,7 +73,8 @@ func (l *GormLogger) Info(ctx context.Context, msg string, data ...interface{}) 
 	}
 }
 
-// Warn implements gormlogger.Interface
+// Warn logs warning messages from GORM operations.
+// It includes context information like request ID if available.
 func (l *GormLogger) Warn(ctx context.Context, msg string, data ...interface{}) {
 	if l.LogLevel >= gormlogger.Warn {
 		logger := WithContext(ctx, l.ZapLogger)
@@ -76,7 +82,8 @@ func (l *GormLogger) Warn(ctx context.Context, msg string, data ...interface{}) 
 	}
 }
 
-// Error implements gormlogger.Interface
+// Error logs error messages from GORM operations.
+// It includes context information like request ID if available.
 func (l *GormLogger) Error(ctx context.Context, msg string, data ...interface{}) {
 	if l.LogLevel >= gormlogger.Error {
 		logger := WithContext(ctx, l.ZapLogger)
@@ -84,7 +91,9 @@ func (l *GormLogger) Error(ctx context.Context, msg string, data ...interface{})
 	}
 }
 
-// Trace implements gormlogger.Interface
+// Trace logs SQL query execution details including timing, SQL statement, and row count.
+// It automatically detects slow queries and logs them as warnings.
+// SQL statements are truncated if too long to prevent log flooding.
 func (l *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (string, int64), err error) {
 	if l.LogLevel <= gormlogger.Silent {
 		return

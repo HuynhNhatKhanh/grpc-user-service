@@ -24,12 +24,14 @@ import (
 	"gorm.io/gorm"
 )
 
+// main is the entry point of the application.
 func main() {
 	if err := run(); err != nil {
 		log.Fatalf("application exited with error: %v", err)
 	}
 }
 
+// run initializes and starts the application server.
 func run() error {
 	// Load Configuration first (to get APP_ENV for logger)
 	configPath := os.Getenv("CONFIG_PATH")
@@ -113,7 +115,7 @@ func run() error {
 	err = pb.RegisterUserServiceHandlerFromEndpoint(
 		context.Background(),
 		mux,
-		"localhost:"+cfg.App.GRPCPort,
+		cfg.App.GRPCPort,
 		[]grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())},
 	)
 	if err != nil {

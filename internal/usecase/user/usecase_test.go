@@ -1,4 +1,4 @@
-package test
+package user
 
 import (
 	"context"
@@ -10,70 +10,65 @@ import (
 	"github.com/stretchr/testify/mock"
 	"go.uber.org/zap/zaptest"
 
-	grpcdomain "grpc-user-service/internal/domain/user"
-	grpcuser "grpc-user-service/internal/usecase/user"
+	domain "grpc-user-service/internal/domain/user"
 )
 
-// ComprehensiveMockRepository is a mock implementation of the Repository interface.
-// It uses testify/mock for creating mock objects in unit tests.
-type ComprehensiveMockRepository struct {
+// MockRepository là mock implementation của Repository interface
+type MockRepository struct {
 	mock.Mock
 }
 
-func (m *ComprehensiveMockRepository) Create(ctx context.Context, u *grpcdomain.User) (int64, error) {
+func (m *MockRepository) Create(ctx context.Context, u *domain.User) (int64, error) {
 	args := m.Called(ctx, u)
 	return args.Get(0).(int64), args.Error(1)
 }
 
-func (m *ComprehensiveMockRepository) GetByID(ctx context.Context, id int64) (*grpcdomain.User, error) {
+func (m *MockRepository) GetByID(ctx context.Context, id int64) (*domain.User, error) {
 	args := m.Called(ctx, id)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*grpcdomain.User), args.Error(1)
+	return args.Get(0).(*domain.User), args.Error(1)
 }
 
-func (m *ComprehensiveMockRepository) GetByEmail(ctx context.Context, email string) (*grpcdomain.User, error) {
+func (m *MockRepository) GetByEmail(ctx context.Context, email string) (*domain.User, error) {
 	args := m.Called(ctx, email)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*grpcdomain.User), args.Error(1)
+	return args.Get(0).(*domain.User), args.Error(1)
 }
 
-func (m *ComprehensiveMockRepository) Update(ctx context.Context, u *grpcdomain.User) (int64, error) {
+func (m *MockRepository) Update(ctx context.Context, u *domain.User) (int64, error) {
 	args := m.Called(ctx, u)
 	return args.Get(0).(int64), args.Error(1)
 }
 
-func (m *ComprehensiveMockRepository) Delete(ctx context.Context, id int64) (int64, error) {
+func (m *MockRepository) Delete(ctx context.Context, id int64) (int64, error) {
 	args := m.Called(ctx, id)
 	return args.Get(0).(int64), args.Error(1)
 }
 
-func (m *ComprehensiveMockRepository) List(ctx context.Context, query string, page, limit int64) ([]grpcdomain.User, error) {
+func (m *MockRepository) List(ctx context.Context, query string, page, limit int64) ([]domain.User, error) {
 	args := m.Called(ctx, query, page, limit)
-	return args.Get(0).([]grpcdomain.User), args.Error(1)
+	return args.Get(0).([]domain.User), args.Error(1)
 }
 
-// setupComprehensiveTestUsecase creates a new usecase instance with a mock repository for testing.
-// It returns both the usecase and the mock repository for test setup and verification.
-func setupComprehensiveTestUsecase(t *testing.T) (*grpcuser.Usecase, *ComprehensiveMockRepository) {
-	mockRepo := new(ComprehensiveMockRepository)
+// Test helper để tạo usecase với mock repo
+func setupTestUsecase(t *testing.T) (*Usecase, *MockRepository) {
+	mockRepo := new(MockRepository)
 	logger := zaptest.NewLogger(t)
-	uc := grpcuser.New(mockRepo, logger)
+	uc := New(mockRepo, logger)
 	return uc, mockRepo
 }
 
 // ==================== CREATE USER TESTS ====================
 
-// TestCreateUser_Success tests successful user creation with valid input.
-// It verifies that the usecase properly validates input and calls repository methods.
 func TestCreateUser_Success(t *testing.T) {
-	uc, mockRepo := setupComprehensiveTestUsecase(t)
+	uc, mockRepo := setupTestUsecase(t)
 	ctx := context.Background()
 
-	req := grpcuser.CreateUserRequest{
+	req := CreateUserRequest{
 		Name:  "John Doe",
 		Email: "john@example.com",
 	}
@@ -81,7 +76,7 @@ func TestCreateUser_Success(t *testing.T) {
 	// Mock GetByEmail returns nil (email not found)
 	mockRepo.On("GetByEmail", ctx, req.Email).Return(nil, nil)
 	// Mock Create returns success
-	mockRepo.On("Create", ctx, mock.MatchedBy(func(u *grpcdomain.User) bool {
+	mockRepo.On("Create", ctx, mock.MatchedBy(func(u *domain.User) bool {
 		return u.Name == req.Name && u.Email == req.Email
 	})).Return(int64(1), nil)
 
@@ -94,13 +89,11 @@ func TestCreateUser_Success(t *testing.T) {
 	mockRepo.AssertExpectations(t)
 }
 
-// TestCreateUser_ValidationError_NameRequired tests user creation validation failure.
-// It verifies that the usecase returns an error when the name field is empty.
 func TestCreateUser_ValidationError_NameRequired(t *testing.T) {
-	uc, _ := setupComprehensiveTestUsecase(t)
+	uc, _ := setupTestUsecase(t)
 	ctx := context.Background()
 
-	req := grpcuser.CreateUserRequest{
+	req := CreateUserRequest{
 		Name:  "", // Empty name
 		Email: "john@example.com",
 	}
@@ -113,10 +106,10 @@ func TestCreateUser_ValidationError_NameRequired(t *testing.T) {
 }
 
 func TestCreateUser_ValidationError_NameTooShort(t *testing.T) {
-	uc, _ := setupComprehensiveTestUsecase(t)
+	uc, _ := setupTestUsecase(t)
 	ctx := context.Background()
 
-	req := grpcuser.CreateUserRequest{
+	req := CreateUserRequest{
 		Name:  "Jo", // Too short (<3)
 		Email: "john@example.com",
 	}
@@ -129,10 +122,10 @@ func TestCreateUser_ValidationError_NameTooShort(t *testing.T) {
 }
 
 func TestCreateUser_ValidationError_EmailRequired(t *testing.T) {
-	uc, _ := setupComprehensiveTestUsecase(t)
+	uc, _ := setupTestUsecase(t)
 	ctx := context.Background()
 
-	req := grpcuser.CreateUserRequest{
+	req := CreateUserRequest{
 		Name:  "John Doe",
 		Email: "", // Empty email
 	}
@@ -145,10 +138,10 @@ func TestCreateUser_ValidationError_EmailRequired(t *testing.T) {
 }
 
 func TestCreateUser_ValidationError_EmailInvalid(t *testing.T) {
-	uc, _ := setupComprehensiveTestUsecase(t)
+	uc, _ := setupTestUsecase(t)
 	ctx := context.Background()
 
-	req := grpcuser.CreateUserRequest{
+	req := CreateUserRequest{
 		Name:  "John Doe",
 		Email: "invalid-email", // Invalid email format
 	}
@@ -161,10 +154,10 @@ func TestCreateUser_ValidationError_EmailInvalid(t *testing.T) {
 }
 
 func TestCreateUser_ValidationError_MultipleErrors(t *testing.T) {
-	uc, _ := setupComprehensiveTestUsecase(t)
+	uc, _ := setupTestUsecase(t)
 	ctx := context.Background()
 
-	req := grpcuser.CreateUserRequest{
+	req := CreateUserRequest{
 		Name:  "Jo",      // Too short
 		Email: "invalid", // Invalid email
 	}
@@ -178,15 +171,15 @@ func TestCreateUser_ValidationError_MultipleErrors(t *testing.T) {
 }
 
 func TestCreateUser_SemanticValidation_EmailAlreadyExists(t *testing.T) {
-	uc, mockRepo := setupComprehensiveTestUsecase(t)
+	uc, mockRepo := setupTestUsecase(t)
 	ctx := context.Background()
 
-	req := grpcuser.CreateUserRequest{
+	req := CreateUserRequest{
 		Name:  "John Doe",
 		Email: "john@example.com",
 	}
 
-	existingUser := &grpcdomain.User{ID: 2, Name: "Existing User", Email: "john@example.com"}
+	existingUser := &domain.User{ID: 2, Name: "Existing User", Email: "john@example.com"}
 
 	// Mock GetByEmail returns existing user
 	mockRepo.On("GetByEmail", ctx, req.Email).Return(existingUser, nil)
@@ -203,10 +196,10 @@ func TestCreateUser_SemanticValidation_EmailAlreadyExists(t *testing.T) {
 // ==================== UPDATE USER TESTS ====================
 
 func TestUpdateUser_Success(t *testing.T) {
-	uc, mockRepo := setupComprehensiveTestUsecase(t)
+	uc, mockRepo := setupTestUsecase(t)
 	ctx := context.Background()
 
-	req := grpcuser.UpdateUserRequest{
+	req := UpdateUserRequest{
 		ID:    1,
 		Name:  "John Updated",
 		Email: "john.updated@example.com",
@@ -215,7 +208,7 @@ func TestUpdateUser_Success(t *testing.T) {
 	// Mock GetByEmail returns nil (email not found)
 	mockRepo.On("GetByEmail", ctx, req.Email).Return(nil, nil)
 	// Mock Update returns success
-	mockRepo.On("Update", ctx, mock.MatchedBy(func(u *grpcdomain.User) bool {
+	mockRepo.On("Update", ctx, mock.MatchedBy(func(u *domain.User) bool {
 		return u.ID == req.ID && u.Name == req.Name && u.Email == req.Email
 	})).Return(int64(1), nil)
 
@@ -229,17 +222,17 @@ func TestUpdateUser_Success(t *testing.T) {
 }
 
 func TestUpdateUser_PartialUpdate_NameOnly(t *testing.T) {
-	uc, mockRepo := setupComprehensiveTestUsecase(t)
+	uc, mockRepo := setupTestUsecase(t)
 	ctx := context.Background()
 
-	req := grpcuser.UpdateUserRequest{
+	req := UpdateUserRequest{
 		ID:   1,
 		Name: "John Updated",
 		// Email empty - should not trigger email validation
 	}
 
 	// Mock Update returns success
-	mockRepo.On("Update", ctx, mock.MatchedBy(func(u *grpcdomain.User) bool {
+	mockRepo.On("Update", ctx, mock.MatchedBy(func(u *domain.User) bool {
 		return u.ID == req.ID && u.Name == req.Name
 	})).Return(int64(1), nil)
 
@@ -253,10 +246,10 @@ func TestUpdateUser_PartialUpdate_NameOnly(t *testing.T) {
 }
 
 func TestUpdateUser_ValidationError_NameTooShort(t *testing.T) {
-	uc, _ := setupComprehensiveTestUsecase(t)
+	uc, _ := setupTestUsecase(t)
 	ctx := context.Background()
 
-	req := grpcuser.UpdateUserRequest{
+	req := UpdateUserRequest{
 		ID:    1,
 		Name:  "Jo", // Too short
 		Email: "john@example.com",
@@ -270,10 +263,10 @@ func TestUpdateUser_ValidationError_NameTooShort(t *testing.T) {
 }
 
 func TestUpdateUser_ValidationError_EmailInvalid(t *testing.T) {
-	uc, _ := setupComprehensiveTestUsecase(t)
+	uc, _ := setupTestUsecase(t)
 	ctx := context.Background()
 
-	req := grpcuser.UpdateUserRequest{
+	req := UpdateUserRequest{
 		ID:    1,
 		Name:  "John Doe",
 		Email: "invalid-email",
@@ -287,16 +280,16 @@ func TestUpdateUser_ValidationError_EmailInvalid(t *testing.T) {
 }
 
 func TestUpdateUser_SemanticValidation_EmailAlreadyExists(t *testing.T) {
-	uc, mockRepo := setupComprehensiveTestUsecase(t)
+	uc, mockRepo := setupTestUsecase(t)
 	ctx := context.Background()
 
-	req := grpcuser.UpdateUserRequest{
+	req := UpdateUserRequest{
 		ID:    1,
 		Name:  "John Updated",
 		Email: "john@example.com",
 	}
 
-	existingUser := &grpcdomain.User{ID: 2, Name: "Existing User", Email: "john@example.com"}
+	existingUser := &domain.User{ID: 2, Name: "Existing User", Email: "john@example.com"}
 
 	// Mock GetByEmail returns existing user with different ID
 	mockRepo.On("GetByEmail", ctx, req.Email).Return(existingUser, nil)
@@ -313,10 +306,10 @@ func TestUpdateUser_SemanticValidation_EmailAlreadyExists(t *testing.T) {
 // ==================== DELETE USER TESTS ====================
 
 func TestDeleteUser_Success(t *testing.T) {
-	uc, mockRepo := setupComprehensiveTestUsecase(t)
+	uc, mockRepo := setupTestUsecase(t)
 	ctx := context.Background()
 
-	req := grpcuser.DeleteUserRequest{ID: 1}
+	req := DeleteUserRequest{ID: 1}
 
 	// Mock Delete returns success
 	mockRepo.On("Delete", ctx, req.ID).Return(int64(1), nil)
@@ -331,10 +324,10 @@ func TestDeleteUser_Success(t *testing.T) {
 }
 
 func TestDeleteUser_InvalidID(t *testing.T) {
-	uc, _ := setupComprehensiveTestUsecase(t)
+	uc, _ := setupTestUsecase(t)
 	ctx := context.Background()
 
-	req := grpcuser.DeleteUserRequest{ID: 0} // Invalid ID
+	req := DeleteUserRequest{ID: 0} // Invalid ID
 
 	resp, err := uc.DeleteUser(ctx, req)
 
@@ -346,11 +339,11 @@ func TestDeleteUser_InvalidID(t *testing.T) {
 // ==================== GET USER TESTS ====================
 
 func TestGetUser_Success(t *testing.T) {
-	uc, mockRepo := setupComprehensiveTestUsecase(t)
+	uc, mockRepo := setupTestUsecase(t)
 	ctx := context.Background()
 
-	req := grpcuser.GetUserRequest{ID: 1}
-	expectedUser := &grpcdomain.User{ID: 1, Name: "John Doe", Email: "john@example.com"}
+	req := GetUserRequest{ID: 1}
+	expectedUser := &domain.User{ID: 1, Name: "John Doe", Email: "john@example.com"}
 
 	// Mock GetByID returns user
 	mockRepo.On("GetByID", ctx, req.ID).Return(expectedUser, nil)
@@ -367,10 +360,10 @@ func TestGetUser_Success(t *testing.T) {
 }
 
 func TestGetUser_InvalidID(t *testing.T) {
-	uc, _ := setupComprehensiveTestUsecase(t)
+	uc, _ := setupTestUsecase(t)
 	ctx := context.Background()
 
-	req := grpcuser.GetUserRequest{ID: 0} // Invalid ID
+	req := GetUserRequest{ID: 0} // Invalid ID
 
 	resp, err := uc.GetUser(ctx, req)
 
@@ -382,16 +375,16 @@ func TestGetUser_InvalidID(t *testing.T) {
 // ==================== LIST USERS TESTS ====================
 
 func TestListUsers_Success(t *testing.T) {
-	uc, mockRepo := setupComprehensiveTestUsecase(t)
+	uc, mockRepo := setupTestUsecase(t)
 	ctx := context.Background()
 
-	req := grpcuser.ListUsersRequest{
+	req := ListUsersRequest{
 		Query: "john",
 		Page:  1,
 		Limit: 10,
 	}
 
-	expectedUsers := []grpcdomain.User{
+	expectedUsers := []domain.User{
 		{ID: 1, Name: "John Doe", Email: "john@example.com"},
 		{ID: 2, Name: "John Smith", Email: "smith@example.com"},
 	}
@@ -422,65 +415,35 @@ func TestFormatValidationError(t *testing.T) {
 	}
 
 	// Test multiple validation errors
-	_ = validate.Struct(&TestStruct{})
+	err := validate.Struct(&TestStruct{})
+	formatted := formatValidationError(err)
 
-	// Since formatValidationError is private, we test validation error handling indirectly
-	// by creating a user with validation errors and checking the response
-	uc, _ := setupComprehensiveTestUsecase(t)
-	ctx := context.Background()
-
-	req := grpcuser.CreateUserRequest{
-		Name:  "", // Invalid - empty name
-		Email: "", // Invalid - empty email
-	}
-
-	resp, err := uc.CreateUser(ctx, req)
-
-	assert.Error(t, err)
-	assert.Nil(t, resp)
-	assert.Contains(t, err.Error(), "validation failed")
-	assert.Contains(t, err.Error(), "Name is required")
-	assert.Contains(t, err.Error(), "Email is required")
+	assert.Error(t, formatted)
+	assert.Contains(t, formatted.Error(), "validation failed")
+	assert.Contains(t, formatted.Error(), "Name is required")
+	assert.Contains(t, formatted.Error(), "Email is required")
 }
 
 func TestFormatValidationError_SingleError(t *testing.T) {
-	// Since formatValidationError is private, we test validation error handling indirectly
-	// by creating a user with single validation error and checking the response
-	uc, _ := setupComprehensiveTestUsecase(t)
-	ctx := context.Background()
+	validate := validator.New()
 
-	req := grpcuser.CreateUserRequest{
-		Name:  "",                 // Invalid - empty name only
-		Email: "test@example.com", // Valid email
+	type TestStruct struct {
+		Name  string `validate:"required,min=3"`
+		Email string
 	}
 
-	resp, err := uc.CreateUser(ctx, req)
+	// Test single validation error
+	err := validate.Struct(&TestStruct{Email: "test@example.com"})
+	formatted := formatValidationError(err)
 
-	assert.Error(t, err)
-	assert.Nil(t, resp)
-	assert.Contains(t, err.Error(), "validation failed")
-	assert.Contains(t, err.Error(), "Name is required")
-	assert.NotContains(t, err.Error(), "Email")
+	assert.Error(t, formatted)
+	assert.Contains(t, formatted.Error(), "Name is required")
+	assert.NotContains(t, formatted.Error(), "Email")
 }
 
 func TestFormatValidationError_NonValidationError(t *testing.T) {
-	// Since formatValidationError is private, we test non-validation error handling indirectly
-	// by testing repository error scenario
-	uc, mockRepo := setupComprehensiveTestUsecase(t)
-	ctx := context.Background()
+	originalErr := errors.New("some other error")
+	formatted := formatValidationError(originalErr)
 
-	req := grpcuser.CreateUserRequest{
-		Name:  "John Doe",
-		Email: "john@example.com",
-	}
-
-	// Mock repository error (not validation error)
-	mockRepo.On("GetByEmail", ctx, req.Email).Return(nil, errors.New("database error"))
-
-	resp, err := uc.CreateUser(ctx, req)
-
-	assert.Error(t, err)
-	assert.Nil(t, resp)
-	assert.Contains(t, err.Error(), "failed to validate email uniqueness")
-	assert.NotContains(t, err.Error(), "validation failed")
+	assert.Equal(t, originalErr, formatted)
 }

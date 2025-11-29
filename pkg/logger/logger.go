@@ -11,22 +11,23 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
-// Config represents logger configuration
+// Config represents the configuration for the logger.
+// It controls log level, format, output destination, and various logging features.
 type Config struct {
-	Level            string  // debug, info, warn, error
-	Format           string  // json, console
-	OutputPath       string  // stdout, stderr, or file path
-	SlowQuerySeconds float64 // slow query threshold
-	EnableSampling   bool    // enable sampling for production
-	ServiceName      string  // service name for logs
-	ServiceVersion   string  // service version for logs
-	Environment      string  // environment (production, development, etc.)
+	Level            string  // Log level: debug, info, warn, error
+	Format           string  // Log format: json, console
+	OutputPath       string  // Output destination: stdout, stderr, or file path
+	SlowQuerySeconds float64 // Threshold for slow query logging in seconds
+	EnableSampling   bool    // Enable log sampling for production optimization
+	ServiceName      string  // Service name for log identification
+	ServiceVersion   string  // Service version for log identification
+	Environment      string  // Environment: production, development, etc.
 }
 
-// New creates a new zap logger.
-// If env is "production", it creates a JSON logger.
-// Otherwise, it creates a console logger.
-// Deprecated: Use NewWithConfig for more control
+// New creates a new zap logger with basic environment-based configuration.
+// If env is "production", it creates a JSON logger suitable for production.
+// Otherwise, it creates a console logger with colored output for development.
+// Deprecated: Use NewWithConfig for more granular control over logger configuration.
 func New(env string) (*zap.Logger, error) {
 	var config zap.Config
 
@@ -48,7 +49,9 @@ func New(env string) (*zap.Logger, error) {
 	return logger, nil
 }
 
-// NewWithConfig creates a new zap logger with full configuration
+// NewWithConfig creates a new zap logger with full configuration support.
+// It supports custom log levels, output formats, destinations, and sampling.
+// Returns a configured logger with service metadata and context support.
 func NewWithConfig(cfg Config) (*zap.Logger, error) {
 	// Parse log level
 	level := parseLogLevel(cfg.Level)
@@ -114,7 +117,8 @@ func NewWithConfig(cfg Config) (*zap.Logger, error) {
 	return logger, nil
 }
 
-// parseLogLevel converts string log level to zapcore.Level
+// parseLogLevel converts a string log level to zapcore.Level.
+// Defaults to InfoLevel if the provided level is not recognized.
 func parseLogLevel(level string) zapcore.Level {
 	switch strings.ToLower(level) {
 	case "debug":
@@ -136,7 +140,8 @@ func parseLogLevel(level string) zapcore.Level {
 	}
 }
 
-// getWriteSyncer returns write syncer based on output path
+// getWriteSyncer returns a zapcore.WriteSyncer based on the output path.
+// Supports stdout, stderr, and file output with automatic log rotation.
 func getWriteSyncer(outputPath string) zapcore.WriteSyncer {
 	switch outputPath {
 	case "stdout", "":
@@ -155,19 +160,20 @@ func getWriteSyncer(outputPath string) zapcore.WriteSyncer {
 	}
 }
 
-// ContextKey is the type for context keys
+// ContextKey is the type used for context keys to avoid collisions.
 type ContextKey string
 
 const (
-	// RequestIDKey is the context key for request ID
+	// RequestIDKey is the context key for storing request ID
 	RequestIDKey ContextKey = "request_id"
-	// TraceIDKey is the context key for trace ID
+	// TraceIDKey is the context key for storing trace ID
 	TraceIDKey ContextKey = "trace_id"
-	// UserIDKey is the context key for user ID
+	// UserIDKey is the context key for storing user ID
 	UserIDKey ContextKey = "user_id"
 )
 
-// WithContext creates a logger with context fields (request_id, trace_id, user_id)
+// WithContext creates a new logger with context fields extracted from the context.
+// It automatically adds request_id, trace_id, and user_id if present in the context.
 func WithContext(ctx context.Context, logger *zap.Logger) *zap.Logger {
 	fields := make([]zap.Field, 0, 3)
 
@@ -196,7 +202,8 @@ func WithContext(ctx context.Context, logger *zap.Logger) *zap.Logger {
 	return logger
 }
 
-// GetRequestID extracts request ID from context
+// GetRequestID extracts the request ID from the context.
+// Returns an empty string if the request ID is not found or is invalid.
 func GetRequestID(ctx context.Context) string {
 	if requestID := ctx.Value(RequestIDKey); requestID != nil {
 		if id, ok := requestID.(string); ok {
@@ -206,7 +213,8 @@ func GetRequestID(ctx context.Context) string {
 	return ""
 }
 
-// GetTraceID extracts trace ID from context
+// GetTraceID extracts the trace ID from the context.
+// Returns an empty string if the trace ID is not found or is invalid.
 func GetTraceID(ctx context.Context) string {
 	if traceID := ctx.Value(TraceIDKey); traceID != nil {
 		if id, ok := traceID.(string); ok {
@@ -216,7 +224,8 @@ func GetTraceID(ctx context.Context) string {
 	return ""
 }
 
-// GetUserID extracts user ID from context
+// GetUserID extracts the user ID from the context.
+// Returns an empty string if the user ID is not found or is invalid.
 func GetUserID(ctx context.Context) string {
 	if userID := ctx.Value(UserIDKey); userID != nil {
 		if id, ok := userID.(string); ok {

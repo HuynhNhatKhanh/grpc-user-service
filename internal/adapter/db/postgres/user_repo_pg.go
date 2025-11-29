@@ -11,30 +11,30 @@ import (
 	"grpc-user-service/internal/domain/user"
 )
 
-// UserRepoPG implements Repository interface using GORM
+// UserRepoPG implements the Repository interface using PostgreSQL and GORM.
 type UserRepoPG struct {
-	db  *gorm.DB
-	log *zap.Logger
+	db  *gorm.DB    // GORM database connection
+	log *zap.Logger // Structured logger for database operations
 }
 
-// NewUserRepoPG creates a new PostgreSQL user repository
+// NewUserRepoPG creates a new instance of UserRepoPG.
 func NewUserRepoPG(db *gorm.DB, log *zap.Logger) *UserRepoPG {
 	return &UserRepoPG{db: db, log: log}
 }
 
-// UserSchema represents the database schema for users
+// UserSchema represents the database schema for the users table.
 type UserSchema struct {
-	ID    int64  `gorm:"primaryKey;autoIncrement"`
-	Name  string `gorm:"not null"`
-	Email string `gorm:"not null;unique"`
+	ID    int64  `gorm:"primaryKey;autoIncrement"` // Unique identifier with auto-increment
+	Name  string `gorm:"not null"`                 // User's full name (required)
+	Email string `gorm:"not null;unique"`          // User's unique email address (required, unique)
 }
 
-// TableName specifies the table name
+// TableName specifies the table name for the UserSchema model.
 func (UserSchema) TableName() string {
 	return "users"
 }
 
-// Create inserts a new user into the database
+// Create inserts a new user into the database.
 func (r *UserRepoPG) Create(ctx context.Context, u *user.User) (int64, error) {
 	if u == nil {
 		return 0, errors.New("user cannot be nil")
@@ -54,7 +54,7 @@ func (r *UserRepoPG) Create(ctx context.Context, u *user.User) (int64, error) {
 	return model.ID, nil
 }
 
-// Update updates an existing user in the database
+// Update updates an existing user in the database.
 func (r *UserRepoPG) Update(ctx context.Context, u *user.User) (int64, error) {
 	if u == nil {
 		return 0, errors.New("user cannot be nil")
@@ -75,7 +75,7 @@ func (r *UserRepoPG) Update(ctx context.Context, u *user.User) (int64, error) {
 	return model.ID, nil
 }
 
-// Delete deletes an existing user from the database
+// Delete removes a user from the database by ID.
 func (r *UserRepoPG) Delete(ctx context.Context, id int64) (int64, error) {
 	if id <= 0 {
 		return 0, errors.New("invalid user id")
@@ -90,7 +90,7 @@ func (r *UserRepoPG) Delete(ctx context.Context, id int64) (int64, error) {
 	return id, nil
 }
 
-// GetByID retrieves a user by ID from the database
+// GetByID retrieves a user from the database by their unique ID.
 func (r *UserRepoPG) GetByID(ctx context.Context, id int64) (*user.User, error) {
 	var model UserSchema
 	if err := r.db.WithContext(ctx).First(&model, id).Error; err != nil {
@@ -109,7 +109,26 @@ func (r *UserRepoPG) GetByID(ctx context.Context, id int64) (*user.User, error) 
 	}, nil
 }
 
-// List lists users from the database with pagination and search
+// GetByEmail retrieves a user from the database by their email address.
+func (r *UserRepoPG) GetByEmail(ctx context.Context, email string) (*user.User, error) {
+	var model UserSchema
+	if err := r.db.WithContext(ctx).Where("email = ?", email).First(&model).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			r.log.Debug("user not found by email", zap.String("email", email))
+			return nil, nil
+		}
+		r.log.Error("failed to get user by email from db", zap.Error(err), zap.String("email", email))
+		return nil, fmt.Errorf("failed to get user by email: %w", err)
+	}
+
+	return &user.User{
+		ID:    model.ID,
+		Name:  model.Name,
+		Email: model.Email,
+	}, nil
+}
+
+// List retrieves users from the database with pagination and search functionality.
 func (r *UserRepoPG) List(ctx context.Context, query string, page, limit int64) ([]user.User, error) {
 	var models []UserSchema
 	if err := r.db.WithContext(ctx).Where("name LIKE ? OR email LIKE ?", "%"+query+"%", "%"+query+"%").Offset(int((page - 1) * limit)).Limit(int(limit)).Find(&models).Error; err != nil {

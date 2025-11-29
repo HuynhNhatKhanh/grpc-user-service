@@ -6,41 +6,48 @@ import (
 	"github.com/spf13/viper"
 )
 
-// Config holds all configuration for the application
+// Config holds all configuration parameters for the application.
+// It includes database, application server, and logger configurations.
 type Config struct {
-	DB     DatabaseConfig
-	App    AppConfig
-	Logger LoggerConfig
+	DB     DatabaseConfig // Database connection settings
+	App    AppConfig      // Application server settings
+	Logger LoggerConfig   // Logger configuration
 }
 
-// DatabaseConfig holds configuration for the database
+// DatabaseConfig holds configuration parameters for database connection.
+// These settings are used to establish connection with PostgreSQL database.
 type DatabaseConfig struct {
-	Host     string `mapstructure:"DB_HOST"`
-	Port     string `mapstructure:"DB_PORT"`
-	User     string `mapstructure:"DB_USER"`
-	Password string `mapstructure:"DB_PASSWORD"`
-	Name     string `mapstructure:"DB_NAME"`
-	SSLMode  string `mapstructure:"DB_SSLMODE"`
+	Host     string `mapstructure:"DB_HOST"`     // Database server host
+	Port     string `mapstructure:"DB_PORT"`     // Database server port
+	User     string `mapstructure:"DB_USER"`     // Database username
+	Password string `mapstructure:"DB_PASSWORD"` // Database password
+	Name     string `mapstructure:"DB_NAME"`     // Database name
+	SSLMode  string `mapstructure:"DB_SSLMODE"`  // SSL mode for database connection
 }
 
-// AppConfig holds configuration for the application server
+// AppConfig holds configuration parameters for the application servers.
+// It includes ports for both gRPC and HTTP servers.
 type AppConfig struct {
-	GRPCPort string `mapstructure:"GRPC_PORT"`
-	HTTPPort string `mapstructure:"HTTP_PORT"`
+	GRPCPort string `mapstructure:"GRPC_PORT"` // Port for gRPC server
+	HTTPPort string `mapstructure:"HTTP_PORT"` // Port for HTTP REST gateway
 }
 
-// LoggerConfig holds configuration for the logger
+// LoggerConfig holds configuration parameters for the logging system.
+// It controls log level, format, output destination, and sampling behavior.
 type LoggerConfig struct {
-	Level            string  `mapstructure:"LOG_LEVEL"`
-	Format           string  `mapstructure:"LOG_FORMAT"`
-	OutputPath       string  `mapstructure:"LOG_OUTPUT_PATH"`
-	SlowQuerySeconds float64 `mapstructure:"LOG_SLOW_QUERY_SECONDS"`
-	EnableSampling   bool    `mapstructure:"LOG_ENABLE_SAMPLING"`
-	ServiceName      string  `mapstructure:"SERVICE_NAME"`
-	ServiceVersion   string  `mapstructure:"SERVICE_VERSION"`
+	Level            string  `mapstructure:"LOG_LEVEL"`              // Log level (debug, info, warn, error)
+	Format           string  `mapstructure:"LOG_FORMAT"`             // Log format (console, json)
+	OutputPath       string  `mapstructure:"LOG_OUTPUT_PATH"`        // Log output destination
+	SlowQuerySeconds float64 `mapstructure:"LOG_SLOW_QUERY_SECONDS"` // Threshold for slow query logging
+	EnableSampling   bool    `mapstructure:"LOG_ENABLE_SAMPLING"`    // Enable log sampling for high traffic
+	ServiceName      string  `mapstructure:"SERVICE_NAME"`           // Service name for log identification
+	ServiceVersion   string  `mapstructure:"SERVICE_VERSION"`        // Service version for log identification
 }
 
 // LoadConfig reads configuration from file or environment variables.
+// It first sets default values, then attempts to read from app.env file,
+// and finally overrides with any environment variables that are set.
+// Returns a populated Config struct or an error if configuration is invalid.
 func LoadConfig(path string) (*Config, error) {
 	// Set defaults first
 	setDefaults()
@@ -83,6 +90,8 @@ func LoadConfig(path string) (*Config, error) {
 	return &config, nil
 }
 
+// setDefaults defines default configuration values for all settings.
+// These values are used when no configuration file or environment variables are provided.
 func setDefaults() {
 	viper.SetDefault("DB_HOST", "localhost")
 	viper.SetDefault("DB_PORT", "5432")
@@ -111,7 +120,8 @@ func setDefaults() {
 	viper.SetDefault("SERVICE_VERSION", "1.0.0")
 }
 
-// DSN returns the PostgreSQL Data Source Name
+// DSN returns the PostgreSQL Data Source Name string.
+// It constructs the connection string using the configured database parameters.
 func (c *DatabaseConfig) DSN() string {
 	return fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=%s",
 		c.Host, c.User, c.Password, c.Name, c.Port, c.SSLMode)
