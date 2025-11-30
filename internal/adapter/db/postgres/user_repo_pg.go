@@ -9,6 +9,7 @@ import (
 	"gorm.io/gorm"
 
 	"grpc-user-service/internal/domain/user"
+	"grpc-user-service/pkg/security"
 )
 
 // UserRepoPG implements the Repository interface using PostgreSQL and GORM.
@@ -130,9 +131,26 @@ func (r *UserRepoPG) GetByEmail(ctx context.Context, email string) (*user.User, 
 
 // List retrieves users from the database with pagination and search functionality.
 func (r *UserRepoPG) List(ctx context.Context, query string, page, limit int64) ([]user.User, error) {
+	// Validate and sanitize search query
+	validatedQuery, err := security.ValidateSearchQuery(query)
+	if err != nil {
+		r.log.Warn("invalid search query", zap.String("query", query), zap.Error(err))
+		return nil, fmt.Errorf("invalid search query: %w", err)
+	}
+
 	var models []UserSchema
-	if err := r.db.WithContext(ctx).Where("name LIKE ? OR email LIKE ?", "%"+query+"%", "%"+query+"%").Offset(int((page - 1) * limit)).Limit(int(limit)).Find(&models).Error; err != nil {
-		r.log.Error("failed to list users from db", zap.Error(err), zap.String("query", query), zap.Int64("page", page), zap.Int64("limit", limit))
+
+	// Build query with proper escaping
+	dbQuery := r.db.WithContext(ctx)
+	if validatedQuery != "" {
+		// Sanitize for LIKE operation and escape wildcards
+		sanitizedQuery := security.SanitizeSearchString(validatedQuery)
+		searchPattern := "%" + sanitizedQuery + "%"
+		dbQuery = dbQuery.Where("name ILIKE ? OR email ILIKE ?", searchPattern, searchPattern)
+	}
+
+	if err := dbQuery.Offset(int((page - 1) * limit)).Limit(int(limit)).Find(&models).Error; err != nil {
+		r.log.Error("failed to list users from db", zap.Error(err), zap.String("query", validatedQuery), zap.Int64("page", page), zap.Int64("limit", limit))
 		return nil, fmt.Errorf("failed to list users: %w", err)
 	}
 

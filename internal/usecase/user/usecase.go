@@ -224,6 +224,11 @@ func (uc *Usecase) ListUsers(ctx context.Context, in ListUsersRequest) (*ListUse
 
 	domainUsers, err := uc.repo.List(ctx, in.Query, in.Page, in.Limit)
 	if err != nil {
+		// Handle validation errors from repository layer
+		if strings.Contains(err.Error(), "invalid search query") {
+			uc.log.Warn("invalid search query in usecase", zap.String("query", in.Query), zap.Error(err))
+			return nil, fmt.Errorf("invalid search query: %s", strings.TrimPrefix(err.Error(), "invalid search query: "))
+		}
 		uc.log.Error("failed to list users", zap.String("query", in.Query), zap.Int64("page", in.Page), zap.Int64("limit", in.Limit), zap.Error(err))
 		return nil, err
 	}

@@ -23,6 +23,7 @@ certs/*.pem
 *.swp
 *.swo
 *~
+coverage
 coverage.out
 coverage.html
 .keep
