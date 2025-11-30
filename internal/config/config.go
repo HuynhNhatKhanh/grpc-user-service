@@ -19,12 +19,16 @@ type Config struct {
 // DatabaseConfig holds configuration parameters for database connection.
 // These settings are used to establish connection with PostgreSQL database.
 type DatabaseConfig struct {
-	Host     string `mapstructure:"DB_HOST"`     // Database server host
-	Port     string `mapstructure:"DB_PORT"`     // Database server port
-	User     string `mapstructure:"DB_USER"`     // Database username
-	Password string `mapstructure:"DB_PASSWORD"` // Database password
-	Name     string `mapstructure:"DB_NAME"`     // Database name
-	SSLMode  string `mapstructure:"DB_SSLMODE"`  // SSL mode for database connection
+	Host            string `mapstructure:"DB_HOST"`               // Database server host
+	Port            string `mapstructure:"DB_PORT"`               // Database server port
+	User            string `mapstructure:"DB_USER"`               // Database username
+	Password        string `mapstructure:"DB_PASSWORD"`           // Database password
+	Name            string `mapstructure:"DB_NAME"`               // Database name
+	SSLMode         string `mapstructure:"DB_SSLMODE"`            // SSL mode for database connection
+	MaxOpenConns    int    `mapstructure:"DB_MAX_OPEN_CONNS"`     // Maximum number of open connections
+	MaxIdleConns    int    `mapstructure:"DB_MAX_IDLE_CONNS"`     // Maximum number of idle connections
+	ConnMaxLifetime int    `mapstructure:"DB_CONN_MAX_LIFETIME"`  // Maximum lifetime of a connection in seconds
+	ConnMaxIdleTime int    `mapstructure:"DB_CONN_MAX_IDLE_TIME"` // Maximum idle time of a connection in seconds
 }
 
 // AppConfig holds configuration parameters for the application servers.
@@ -98,6 +102,10 @@ func LoadConfig(path string) (*Config, error) {
 	config.DB.Password = viper.GetString("DB_PASSWORD")
 	config.DB.Name = viper.GetString("DB_NAME")
 	config.DB.SSLMode = viper.GetString("DB_SSLMODE")
+	config.DB.MaxOpenConns = viper.GetInt("DB_MAX_OPEN_CONNS")
+	config.DB.MaxIdleConns = viper.GetInt("DB_MAX_IDLE_CONNS")
+	config.DB.ConnMaxLifetime = viper.GetInt("DB_CONN_MAX_LIFETIME")
+	config.DB.ConnMaxIdleTime = viper.GetInt("DB_CONN_MAX_IDLE_TIME")
 
 	config.App.GRPCPort = viper.GetString("GRPC_PORT")
 	config.App.HTTPPort = viper.GetString("HTTP_PORT")
@@ -135,6 +143,11 @@ func setDefaults() {
 	viper.SetDefault("DB_PASSWORD", "postgres")
 	viper.SetDefault("DB_NAME", "grpc_user_service")
 	viper.SetDefault("DB_SSLMODE", "disable")
+	// Database connection pool defaults
+	viper.SetDefault("DB_MAX_OPEN_CONNS", 25)
+	viper.SetDefault("DB_MAX_IDLE_CONNS", 5)
+	viper.SetDefault("DB_CONN_MAX_LIFETIME", 300)  // 5 minutes in seconds
+	viper.SetDefault("DB_CONN_MAX_IDLE_TIME", 600) // 10 minutes in seconds
 
 	viper.SetDefault("GRPC_PORT", "50051")
 	viper.SetDefault("HTTP_PORT", "8080")

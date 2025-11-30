@@ -90,7 +90,24 @@ func run() error {
 		l.Fatal("failed to connect to database", zap.Error(err))
 	}
 
-	l.Info("database connected successfully")
+	// Configure database connection pool
+	sqlDB, err := db.DB()
+	if err != nil {
+		l.Fatal("failed to get underlying sql.DB", zap.Error(err))
+	}
+
+	// Set connection pool parameters
+	sqlDB.SetMaxOpenConns(cfg.DB.MaxOpenConns)
+	sqlDB.SetMaxIdleConns(cfg.DB.MaxIdleConns)
+	sqlDB.SetConnMaxLifetime(time.Duration(cfg.DB.ConnMaxLifetime) * time.Second)
+	sqlDB.SetConnMaxIdleTime(time.Duration(cfg.DB.ConnMaxIdleTime) * time.Second)
+
+	l.Info("database connected successfully",
+		zap.Int("max_open_conns", cfg.DB.MaxOpenConns),
+		zap.Int("max_idle_conns", cfg.DB.MaxIdleConns),
+		zap.Int("conn_max_lifetime_seconds", cfg.DB.ConnMaxLifetime),
+		zap.Int("conn_max_idle_time_seconds", cfg.DB.ConnMaxIdleTime),
+	)
 
 	// Initialize Redis client
 	redisConfig := redisclient.Config{
