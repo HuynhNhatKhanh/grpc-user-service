@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"go.uber.org/zap"
+	"golang.org/x/sync/singleflight"
 
 	"grpc-user-service/internal/adapter/cache"
 	domain "grpc-user-service/internal/domain/user"
@@ -33,6 +34,7 @@ type Usecase struct {
 	cache    cache.UserCache     // Cache for user data
 	log      *zap.Logger         // Logger for structured logging
 	validate *validator.Validate // Validator for request validation
+	group    singleflight.Group  // Single-flight group for cache stampede protection
 }
 
 // New creates a new instance of Usecase with the provided repository, cache, and logger.
@@ -168,7 +170,7 @@ func (uc *Usecase) DeleteUser(ctx context.Context, in DeleteUserRequest) (*Delet
 }
 
 // GetUser retrieves a user by ID after validating the request.
-// It uses cache-aside pattern: check cache first, then database if cache miss.
+// It uses cache-aside pattern with single-flight protection to prevent cache stampede.
 func (uc *Usecase) GetUser(ctx context.Context, in GetUserRequest) (*GetUserResponse, error) {
 	if in.ID <= 0 {
 		uc.log.Warn("get user validation failed", zap.Int64("id", in.ID), zap.String("reason", "invalid id"))
@@ -190,24 +192,44 @@ func (uc *Usecase) GetUser(ctx context.Context, in GetUserRequest) (*GetUserResp
 		}
 	}
 
-	// Cache miss or cache disabled - get from database
-	u, err := uc.repo.GetByID(ctx, in.ID)
+	// Cache miss or cache disabled - use single-flight to prevent stampede
+	key := fmt.Sprintf("user:%d", in.ID)
+	result, err, _ := uc.group.Do(key, func() (any, error) {
+		// Double-check cache in case another request populated it while we were waiting
+		if uc.cache != nil {
+			cachedUser, err := uc.cache.Get(ctx, in.ID)
+			if err == nil && cachedUser != nil {
+				uc.log.Debug("user retrieved from cache after single-flight wait", zap.Int64("id", in.ID))
+				return cachedUser, nil
+			}
+		}
+
+		// Only one request hits database
+		u, err := uc.repo.GetByID(ctx, in.ID)
+		if err != nil {
+			return nil, err
+		}
+
+		// Store in cache for future requests
+		if uc.cache != nil {
+			if err := uc.cache.Set(ctx, u); err != nil {
+				uc.log.Warn("failed to cache user", zap.Int64("id", in.ID), zap.Error(err))
+			}
+		}
+
+		return u, nil
+	})
+
 	if err != nil {
 		uc.log.Error("failed to get user", zap.Int64("id", in.ID), zap.Error(err))
 		return nil, err
 	}
 
-	// Store in cache for future requests
-	if uc.cache != nil {
-		if err := uc.cache.Set(ctx, u); err != nil {
-			uc.log.Warn("failed to cache user", zap.Int64("id", in.ID), zap.Error(err))
-		}
-	}
-
+	user := result.(*domain.User)
 	return &GetUserResponse{
-		ID:    u.ID,
-		Name:  u.Name,
-		Email: u.Email,
+		ID:    user.ID,
+		Name:  user.Name,
+		Email: user.Email,
 	}, nil
 }
 
