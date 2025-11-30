@@ -55,7 +55,16 @@ type ListUsersRequest struct {
 
 // ListUsersResponse represents the response payload for user listing.
 type ListUsersResponse struct {
-	Users []User
+	Users      []User
+	Pagination *Pagination
+}
+
+// Pagination represents pagination information for list responses.
+type Pagination struct {
+	Total      int64
+	Page       int64
+	Limit      int64
+	TotalPages int64
 }
 
 // User represents a user DTO (Data Transfer Object) for API responses.

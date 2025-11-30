@@ -119,16 +119,18 @@ func TestUserRepoPG_List_SQLInjectionProtection(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
-			users, err := repo.List(ctx, tt.query, 1, 10)
+			users, total, err := repo.List(ctx, tt.query, 1, 10)
 
 			if tt.expectError {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.errorMsg)
 				assert.Nil(t, users)
+				assert.Equal(t, int64(0), total)
 			} else {
 				require.NoError(t, err)
 				assert.NotNil(t, users)
 				assert.Equal(t, tt.expectCount, len(users))
+				assert.GreaterOrEqual(t, total, int64(len(users))) // total should be >= count
 			}
 		})
 	}
@@ -181,11 +183,12 @@ func TestUserRepoPG_List_WildcardEscaping(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
-			users, err := repo.List(ctx, tt.query, 1, 10)
+			users, total, err := repo.List(ctx, tt.query, 1, 10)
 
 			require.NoError(t, err)
 			assert.NotNil(t, users)
 			assert.Equal(t, tt.expectCount, len(users), tt.description)
+			assert.GreaterOrEqual(t, total, int64(len(users))) // total should be >= count
 		})
 	}
 }
@@ -232,11 +235,12 @@ func TestUserRepoPG_List_CaseInsensitiveSearch(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
-			users, err := repo.List(ctx, tt.query, 1, 10)
+			users, total, err := repo.List(ctx, tt.query, 1, 10)
 
 			require.NoError(t, err)
 			assert.NotNil(t, users)
 			assert.Equal(t, tt.expectCount, len(users))
+			assert.GreaterOrEqual(t, total, int64(len(users))) // total should be >= count
 		})
 	}
 }

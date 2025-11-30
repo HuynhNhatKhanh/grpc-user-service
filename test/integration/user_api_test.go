@@ -62,9 +62,9 @@ func (m *MockRepository) Delete(ctx context.Context, id int64) (int64, error) {
 	return args.Get(0).(int64), args.Error(1)
 }
 
-func (m *MockRepository) List(ctx context.Context, query string, page, limit int64) ([]grpcdomain.User, error) {
+func (m *MockRepository) List(ctx context.Context, query string, page, limit int64) ([]grpcdomain.User, int64, error) {
 	args := m.Called(ctx, query, page, limit)
-	return args.Get(0).([]grpcdomain.User), args.Error(1)
+	return args.Get(0).([]grpcdomain.User), args.Get(1).(int64), args.Error(2)
 }
 
 // UserAPIIntegrationTestSuite tests the HTTP API through grpc-gateway
@@ -277,7 +277,7 @@ func (suite *UserAPIIntegrationTestSuite) TestListUsersAPI() {
 		{ID: 1, Name: "John Doe", Email: "john@example.com"},
 		{ID: 2, Name: "Jane Smith", Email: "jane@example.com"},
 	}
-	suite.mockRepo.On("List", mock.Anything, "", int64(1), mock.AnythingOfType("int64")).Return(mockUsers, nil)
+	suite.mockRepo.On("List", mock.Anything, "", int64(1), mock.AnythingOfType("int64")).Return(mockUsers, int64(50), nil)
 
 	// Make HTTP request
 	resp, err := suite.makeRequest("GET", "/v1/users?page=1&limit=10", nil)
@@ -294,6 +294,15 @@ func (suite *UserAPIIntegrationTestSuite) TestListUsersAPI() {
 	users, ok := response["users"].([]interface{})
 	suite.Require().True(ok)
 	assert.Equal(suite.T(), 2, len(users))
+
+	// Verify pagination info
+	pagination, ok := response["pagination"].(map[string]interface{})
+	suite.Require().True(ok)
+	assert.Equal(suite.T(), float64(50), pagination["total"])
+	assert.Equal(suite.T(), float64(1), pagination["page"])
+	assert.Equal(suite.T(), float64(10), pagination["limit"])
+	assert.Equal(suite.T(), float64(5), pagination["totalPages"]) // (50 + 10 - 1) / 10 = 5
+
 	suite.mockRepo.AssertExpectations(suite.T())
 }
 

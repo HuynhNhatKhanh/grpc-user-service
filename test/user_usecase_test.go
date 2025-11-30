@@ -51,9 +51,9 @@ func (m *ComprehensiveMockRepository) Delete(ctx context.Context, id int64) (int
 	return args.Get(0).(int64), args.Error(1)
 }
 
-func (m *ComprehensiveMockRepository) List(ctx context.Context, query string, page, limit int64) ([]grpcdomain.User, error) {
+func (m *ComprehensiveMockRepository) List(ctx context.Context, query string, page, limit int64) ([]grpcdomain.User, int64, error) {
 	args := m.Called(ctx, query, page, limit)
-	return args.Get(0).([]grpcdomain.User), args.Error(1)
+	return args.Get(0).([]grpcdomain.User), args.Get(1).(int64), args.Error(2)
 }
 
 // setupComprehensiveTestUsecase creates a new usecase instance with a mock repository for testing.
@@ -396,8 +396,8 @@ func TestListUsers_Success(t *testing.T) {
 		{ID: 2, Name: "John Smith", Email: "smith@example.com"},
 	}
 
-	// Mock List returns users
-	mockRepo.On("List", ctx, req.Query, req.Page, req.Limit).Return(expectedUsers, nil)
+	// Mock List returns users and total count
+	mockRepo.On("List", ctx, req.Query, req.Page, req.Limit).Return(expectedUsers, int64(30), nil)
 
 	resp, err := uc.ListUsers(ctx, req)
 
@@ -407,6 +407,13 @@ func TestListUsers_Success(t *testing.T) {
 	assert.Equal(t, expectedUsers[0].ID, resp.Users[0].ID)
 	assert.Equal(t, expectedUsers[0].Name, resp.Users[0].Name)
 	assert.Equal(t, expectedUsers[0].Email, resp.Users[0].Email)
+
+	// Verify pagination info
+	assert.NotNil(t, resp.Pagination)
+	assert.Equal(t, int64(30), resp.Pagination.Total)
+	assert.Equal(t, int64(1), resp.Pagination.Page)
+	assert.Equal(t, int64(10), resp.Pagination.Limit)
+	assert.Equal(t, int64(3), resp.Pagination.TotalPages) // (30 + 10 - 1) / 10 = 3
 
 	mockRepo.AssertExpectations(t)
 }

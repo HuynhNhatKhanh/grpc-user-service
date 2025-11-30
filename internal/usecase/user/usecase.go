@@ -19,12 +19,12 @@ import (
 // It abstracts the data layer, allowing different implementations
 // (e.g., PostgreSQL, MongoDB) to be used interchangeably.
 type Repository interface {
-	Create(ctx context.Context, u *domain.User) (int64, error)                        // Create a new user
-	GetByID(ctx context.Context, id int64) (*domain.User, error)                      // Retrieve user by ID
-	GetByEmail(ctx context.Context, email string) (*domain.User, error)               // Retrieve user by email
-	Update(ctx context.Context, u *domain.User) (int64, error)                        // Update existing user
-	Delete(ctx context.Context, id int64) (int64, error)                              // Delete user by ID
-	List(ctx context.Context, query string, page, limit int64) ([]domain.User, error) // List users with pagination and search
+	Create(ctx context.Context, u *domain.User) (int64, error)                               // Create a new user
+	GetByID(ctx context.Context, id int64) (*domain.User, error)                             // Retrieve user by ID
+	GetByEmail(ctx context.Context, email string) (*domain.User, error)                      // Retrieve user by email
+	Update(ctx context.Context, u *domain.User) (int64, error)                               // Update existing user
+	Delete(ctx context.Context, id int64) (int64, error)                                     // Delete user by ID
+	List(ctx context.Context, query string, page, limit int64) ([]domain.User, int64, error) // List users with pagination and search, returns users and total count
 }
 
 // Usecase implements the business logic for user management operations.
@@ -247,7 +247,7 @@ func (uc *Usecase) ListUsers(ctx context.Context, in ListUsersRequest) (*ListUse
 
 	uc.log.Info("listing users", zap.String("query", in.Query), zap.Int64("page", in.Page), zap.Int64("limit", in.Limit))
 
-	domainUsers, err := uc.repo.List(ctx, in.Query, in.Page, in.Limit)
+	domainUsers, total, err := uc.repo.List(ctx, in.Query, in.Page, in.Limit)
 	if err != nil {
 		// Repo already returns custom errors (e.g. ValidationError for invalid query)
 		uc.log.Error("failed to list users", zap.String("query", in.Query), zap.Int64("page", in.Page), zap.Int64("limit", in.Limit), zap.Error(err))
@@ -263,7 +263,21 @@ func (uc *Usecase) ListUsers(ctx context.Context, in ListUsersRequest) (*ListUse
 		}
 	}
 
+	// Calculate pagination info
+	totalPages := int64(0)
+	if in.Limit > 0 {
+		totalPages = (total + in.Limit - 1) / in.Limit
+	}
+
+	pagination := &Pagination{
+		Total:      total,
+		Page:       in.Page,
+		Limit:      in.Limit,
+		TotalPages: totalPages,
+	}
+
 	return &ListUsersResponse{
-		Users: users,
+		Users:      users,
+		Pagination: pagination,
 	}, nil
 }

@@ -281,6 +281,30 @@
             "type": "object",
             "$ref": "#/definitions/userGetUserResponse"
           }
+        },
+        "pagination": {
+          "$ref": "#/definitions/userPagination"
+        }
+      }
+    },
+    "userPagination": {
+      "type": "object",
+      "properties": {
+        "total": {
+          "type": "string",
+          "format": "int64"
+        },
+        "page": {
+          "type": "string",
+          "format": "int64"
+        },
+        "limit": {
+          "type": "string",
+          "format": "int64"
+        },
+        "totalPages": {
+          "type": "string",
+          "format": "int64"
         }
       }
     },

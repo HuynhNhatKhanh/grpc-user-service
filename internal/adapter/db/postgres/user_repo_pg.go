@@ -131,12 +131,12 @@ func (r *UserRepoPG) GetByEmail(ctx context.Context, email string) (*user.User, 
 }
 
 // List retrieves users from the database with pagination and search functionality.
-func (r *UserRepoPG) List(ctx context.Context, query string, page, limit int64) ([]user.User, error) {
+func (r *UserRepoPG) List(ctx context.Context, query string, page, limit int64) ([]user.User, int64, error) {
 	// Validate and sanitize search query
 	validatedQuery, err := security.ValidateSearchQuery(query)
 	if err != nil {
 		r.log.Warn("invalid search query", zap.String("query", query), zap.Error(err))
-		return nil, pkgerrors.NewValidationError("query", err.Error())
+		return nil, 0, pkgerrors.NewValidationError("query", err.Error())
 	}
 
 	var models []UserSchema
@@ -157,9 +157,18 @@ func (r *UserRepoPG) List(ctx context.Context, query string, page, limit int64) 
 		}
 	}
 
+	// Count total records
+	var total int64
+	countQuery := dbQuery
+	if err := countQuery.Model(&UserSchema{}).Count(&total).Error; err != nil {
+		r.log.Error("failed to count users from db", zap.Error(err), zap.String("query", validatedQuery))
+		return nil, 0, pkgerrors.NewInternalError("failed to count users", err)
+	}
+
+	// Get paginated results
 	if err := dbQuery.Offset(int((page - 1) * limit)).Limit(int(limit)).Find(&models).Error; err != nil {
 		r.log.Error("failed to list users from db", zap.Error(err), zap.String("query", validatedQuery), zap.Int64("page", page), zap.Int64("limit", limit))
-		return nil, pkgerrors.NewInternalError("failed to list users", err)
+		return nil, 0, pkgerrors.NewInternalError("failed to list users", err)
 	}
 
 	users := make([]user.User, len(models))
@@ -171,5 +180,5 @@ func (r *UserRepoPG) List(ctx context.Context, query string, page, limit int64) 
 		}
 	}
 
-	return users, nil
+	return users, total, nil
 }

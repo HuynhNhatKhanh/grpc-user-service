@@ -139,7 +139,18 @@ func (s *UserServiceServer) ListUsers(ctx context.Context, req *pb.ListUsersRequ
 		}
 	}
 
+	var pbPagination *pb.Pagination
+	if usersResponse.Pagination != nil {
+		pbPagination = &pb.Pagination{
+			Total:      usersResponse.Pagination.Total,
+			Page:       usersResponse.Pagination.Page,
+			Limit:      usersResponse.Pagination.Limit,
+			TotalPages: usersResponse.Pagination.TotalPages,
+		}
+	}
+
 	return &pb.ListUsersResponse{
-		Users: pbUsers,
+		Users:      pbUsers,
+		Pagination: pbPagination,
 	}, nil
 }
