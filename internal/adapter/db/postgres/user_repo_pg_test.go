@@ -4,10 +4,10 @@ import (
 	"context"
 	"testing"
 
+	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
 	"grpc-user-service/internal/domain/user"
@@ -64,43 +64,43 @@ func TestUserRepoPG_List_SQLInjectionProtection(t *testing.T) {
 			name:        "SQL injection attempt - UNION",
 			query:       "john UNION SELECT * FROM users",
 			expectError: true,
-			errorMsg:    "invalid search query",
+			errorMsg:    "validation failed",
 		},
 		{
 			name:        "SQL injection attempt - OR condition",
 			query:       "john OR 1=1",
 			expectError: true,
-			errorMsg:    "invalid search query",
+			errorMsg:    "validation failed",
 		},
 		{
 			name:        "SQL injection attempt - DROP",
 			query:       "john; DROP TABLE users",
 			expectError: true,
-			errorMsg:    "invalid search query",
+			errorMsg:    "validation failed",
 		},
 		{
 			name:        "SQL injection attempt - comment",
 			query:       "john --",
 			expectError: true,
-			errorMsg:    "invalid search query",
+			errorMsg:    "validation failed",
 		},
 		{
 			name:        "XSS attempt",
 			query:       "<script>alert('xss')</script>",
 			expectError: true,
-			errorMsg:    "invalid search query",
+			errorMsg:    "validation failed",
 		},
 		{
 			name:        "query too long",
 			query:       string(make([]rune, 101)), // Max is 100
 			expectError: true,
-			errorMsg:    "invalid search query",
+			errorMsg:    "validation failed",
 		},
 		{
 			name:        "invalid characters",
 			query:       "john&doe",
 			expectError: true,
-			errorMsg:    "invalid search query",
+			errorMsg:    "validation failed",
 		},
 		{
 			name:        "valid email search",
@@ -225,7 +225,7 @@ func TestUserRepoPG_List_CaseInsensitiveSearch(t *testing.T) {
 		{
 			name:        "mixed case search",
 			query:       "Admin",
-			expectCount: 2, // Should find "ADMIN User" and "admin@example.com"
+			expectCount: 1, // Should find "ADMIN User" and "admin@example.com" (same user)
 		},
 	}
 

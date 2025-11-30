@@ -1,7 +1,7 @@
 package security
 
 import (
-	"errors"
+	pkgerrors "grpc-user-service/pkg/errors"
 	"regexp"
 	"strings"
 	"unicode"
@@ -20,7 +20,7 @@ var dangerousPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)(or|and)\s+['"].*['"]\s*=\s*['"].*['"]`),
 	regexp.MustCompile(`(?i)(--|#|/\*|\*/)`),
 	regexp.MustCompile(`(?i)(waitfor|delay|benchmark|sleep)`),
-	
+
 	// XSS patterns (if used for web display)
 	regexp.MustCompile(`(?i)(<script|</script|javascript:|vbscript:|onload=|onerror=)`),
 }
@@ -33,7 +33,7 @@ func ValidateSearchQuery(query string) (string, error) {
 
 	// Check length
 	if len(query) > MaxSearchQueryLength {
-		return "", errors.New("search query too long")
+		return "", pkgerrors.NewValidationError("query", "search query too long")
 	}
 
 	// Trim whitespace
@@ -43,14 +43,14 @@ func ValidateSearchQuery(query string) (string, error) {
 	lowerQuery := strings.ToLower(query)
 	for _, pattern := range dangerousPatterns {
 		if pattern.MatchString(lowerQuery) {
-			return "", errors.New("search query contains invalid characters")
+			return "", pkgerrors.NewValidationError("query", "search query contains invalid characters")
 		}
 	}
 
 	// Additional character validation - allow only safe characters
 	for _, char := range query {
 		if !isValidSearchChar(char) {
-			return "", errors.New("search query contains invalid characters")
+			return "", pkgerrors.NewValidationError("query", "search query contains invalid characters")
 		}
 	}
 
@@ -62,7 +62,7 @@ func isValidSearchChar(char rune) bool {
 	// Allow letters, numbers, spaces, and common punctuation
 	return unicode.IsLetter(char) || unicode.IsNumber(char) ||
 		char == ' ' || char == '-' || char == '_' || char == '.' ||
-		char == '@' || char == '+' || char == '#' || char == '*'
+		char == '@' || char == '+' || char == '#' || char == '*' || char == '%'
 }
 
 // SanitizeSearchString prepares a query string for LIKE operations
@@ -70,10 +70,10 @@ func SanitizeSearchString(query string) string {
 	if query == "" {
 		return ""
 	}
-	
+
 	// Escape wildcards and other special characters
 	query = strings.ReplaceAll(query, "%", "\\%")
 	query = strings.ReplaceAll(query, "_", "\\_")
-	
+
 	return query
 }

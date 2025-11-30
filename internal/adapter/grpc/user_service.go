@@ -2,7 +2,6 @@ package grpc
 
 import (
 	"context"
-	"strings"
 
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
@@ -29,23 +28,19 @@ func mapError(err error) error {
 	if err == nil {
 		return nil
 	}
-	// Check for validation errors
-	if strings.Contains(err.Error(), "validation failed") {
-		return status.Error(codes.InvalidArgument, err.Error())
+
+	// Check if error implements GRPCStatuser interface (custom pkg/errors types)
+	type grpcStatuser interface {
+		GRPCStatus() *status.Status
 	}
-	// Check for "already exists" errors
-	if strings.Contains(err.Error(), "already exists") {
-		return status.Error(codes.AlreadyExists, err.Error())
+
+	// Use type assertion to check if error has GRPCStatus method
+	if grpcErr, ok := err.(grpcStatuser); ok {
+		return grpcErr.GRPCStatus().Err()
 	}
-	// Check for "not found" errors
-	if strings.Contains(err.Error(), "not found") {
-		return status.Error(codes.NotFound, err.Error())
-	}
-	// Check for "invalid" errors
-	if strings.Contains(err.Error(), "invalid") {
-		return status.Error(codes.InvalidArgument, err.Error())
-	}
-	return err
+
+	// Default to internal error for any unhandled errors
+	return status.Error(codes.Internal, err.Error())
 }
 
 // CreateUser handles the gRPC CreateUser request.

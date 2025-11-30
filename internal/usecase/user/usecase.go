@@ -2,7 +2,6 @@ package user
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -10,6 +9,7 @@ import (
 
 	"grpc-user-service/internal/adapter/cache"
 	domain "grpc-user-service/internal/domain/user"
+	pkgerrors "grpc-user-service/pkg/errors"
 
 	"github.com/go-playground/validator/v10"
 )
@@ -59,7 +59,7 @@ func formatValidationError(err error) error {
 				messages = append(messages, fmt.Sprintf("%s is invalid", e.Field()))
 			}
 		}
-		return fmt.Errorf("validation failed: %s", strings.Join(messages, ", "))
+		return pkgerrors.NewValidationError("", fmt.Sprintf("validation failed: %s", strings.Join(messages, ", ")))
 	}
 	return err
 }
@@ -73,14 +73,16 @@ func (uc *Usecase) CreateUser(ctx context.Context, in CreateUserRequest) (*Creat
 		return nil, formatValidationError(err)
 	}
 
+	// Check if email already exists
 	existingUser, err := uc.repo.GetByEmail(ctx, in.Email)
 	if err != nil {
+		// Database error occurred (not "not found")
 		uc.log.Error("failed to check existing email", zap.String("email", in.Email), zap.Error(err))
-		return nil, errors.New("failed to validate email uniqueness")
+		return nil, pkgerrors.NewInternalError("failed to validate email uniqueness", err)
 	}
 	if existingUser != nil {
 		uc.log.Warn("email already exists", zap.String("email", in.Email))
-		return nil, errors.New("email already exists")
+		return nil, pkgerrors.NewAlreadyExistsError("user", "email already exists")
 	}
 
 	// Business logic: create user
@@ -108,12 +110,13 @@ func (uc *Usecase) UpdateUser(ctx context.Context, in UpdateUserRequest) (*Updat
 	if in.Email != "" {
 		existingUser, err := uc.repo.GetByEmail(ctx, in.Email)
 		if err != nil {
+			// Database error occurred (not "not found")
 			uc.log.Error("failed to check existing email", zap.String("email", in.Email), zap.Error(err))
-			return nil, errors.New("failed to validate email uniqueness")
+			return nil, pkgerrors.NewInternalError("failed to validate email uniqueness", err)
 		}
 		if existingUser != nil && existingUser.ID != in.ID {
 			uc.log.Warn("email already exists", zap.String("email", in.Email), zap.Int64("existing_id", existingUser.ID))
-			return nil, errors.New("email already exists")
+			return nil, pkgerrors.NewAlreadyExistsError("user", "email already exists")
 		}
 	}
 
@@ -145,7 +148,7 @@ func (uc *Usecase) DeleteUser(ctx context.Context, in DeleteUserRequest) (*Delet
 
 	if in.ID <= 0 {
 		uc.log.Warn("delete user validation failed", zap.Int64("id", in.ID), zap.String("reason", "invalid id"))
-		return nil, errors.New("invalid user id")
+		return nil, pkgerrors.NewValidationError("id", "invalid user id")
 	}
 
 	id, err := uc.repo.Delete(ctx, in.ID)
@@ -169,7 +172,7 @@ func (uc *Usecase) DeleteUser(ctx context.Context, in DeleteUserRequest) (*Delet
 func (uc *Usecase) GetUser(ctx context.Context, in GetUserRequest) (*GetUserResponse, error) {
 	if in.ID <= 0 {
 		uc.log.Warn("get user validation failed", zap.Int64("id", in.ID), zap.String("reason", "invalid id"))
-		return nil, errors.New("invalid user id")
+		return nil, pkgerrors.NewValidationError("id", "invalid user id")
 	}
 
 	// Try to get from cache first
@@ -224,11 +227,7 @@ func (uc *Usecase) ListUsers(ctx context.Context, in ListUsersRequest) (*ListUse
 
 	domainUsers, err := uc.repo.List(ctx, in.Query, in.Page, in.Limit)
 	if err != nil {
-		// Handle validation errors from repository layer
-		if strings.Contains(err.Error(), "invalid search query") {
-			uc.log.Warn("invalid search query in usecase", zap.String("query", in.Query), zap.Error(err))
-			return nil, fmt.Errorf("invalid search query: %s", strings.TrimPrefix(err.Error(), "invalid search query: "))
-		}
+		// Repo already returns custom errors (e.g. ValidationError for invalid query)
 		uc.log.Error("failed to list users", zap.String("query", in.Query), zap.Int64("page", in.Page), zap.Int64("limit", in.Limit), zap.Error(err))
 		return nil, err
 	}
