@@ -148,7 +148,7 @@ func (r *UserRepoPG) List(ctx context.Context, query string, page, limit int64) 
 		sanitizedQuery := security.SanitizeSearchString(validatedQuery)
 		searchPattern := "%" + sanitizedQuery + "%"
 
-		if r.db.Dialector.Name() == "postgres" {
+		if r.db.Name() == "postgres" {
 			dbQuery = dbQuery.Where("name ILIKE ? OR email ILIKE ?", searchPattern, searchPattern)
 		} else {
 			// Fallback for SQLite (tests) - Ensure case-insensitive search and escape character

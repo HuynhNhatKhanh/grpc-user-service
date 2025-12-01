@@ -8,13 +8,15 @@ This is a user management microservice that provides both **gRPC** and **REST** 
 
 ### Key Features
 
-- **Clean Architecture** - Clear separation between business logic and infrastructure
+- **Clean Architecture** - Clear separation between business logic and infrastructure with DI container
+- **Config Validation** - Comprehensive validation at startup (40+ rules) for fail-fast error detection
+- **Graceful Shutdown** - Configurable timeout (1-300s) for different environments
 - **gRPC + gRPC-Gateway** - Native gRPC with automatic REST API generation
 - **Redis Caching** - Cache-aside pattern with automatic invalidation
 - **Rate Limiting** - gRPC interceptor-based rate limiting with Redis
 - **Dependency Inversion** - Business logic independent of frameworks and databases
 - **Type-safe** - Leveraging Go's strong typing and Protocol Buffers
-- **Production-ready** - Structured logging, error handling, and graceful shutdown
+- **Production-ready** - Structured logging, error handling, and panic recovery
 - **Testable** - Interface-based design for easy mocking and testing
 
 ## 🏗️ Architecture
@@ -83,21 +85,42 @@ grpc-user-service/
 │
 ├── cmd/                          # Application entrypoints
 │   └── api/
-│       └── main.go               # Main server application
+│       ├── main.go               # Main server application
+│       ├── app/
+│       │   └── app.go            # Application lifecycle management
+│       ├── di/                   # NEW: Dependency Injection
+│       │   └── container.go      # DI container for all dependencies
+│       ├── infrastructure/       # NEW: Infrastructure setup
+│       │   ├── database.go       # Database initialization
+│       │   └── cache.go          # Redis initialization
+│       └── server/
+│           ├── server.go         # Server lifecycle
+│           ├── grpc.go           # gRPC setup
+│           ├── http.go           # HTTP gateway setup
+│           └── signal.go         # Signal handling
 │
 ├── internal/                     # Private application code
 │   ├── domain/                   # 🟢 Enterprise Business Rules
 │   │   └── user/
 │   │       ├── entity.go         # User entity (pure Go)
-│   │       └── value_object.go   # Value objects
+│   │       └── pagination.go     # Pagination models
 │   │
 │   ├── usecase/                  # 🟡 Application Business Rules
 │   │   └── user/
-│   │       └── usecase.go        # Business logic & interfaces
+│   │       ├── usecase.go        # Business logic & interfaces
+│   │       └── dto.go            # Data transfer objects
 │   │
 │   ├── adapter/                  # 🔴 Interface Adapters
 │   │   ├── grpc/                 # gRPC transport layer
-│   │   │   └── user_service.go   # gRPC → Usecase adapter
+│   │   │   ├── user_service.go   # gRPC → Usecase adapter
+│   │   │   └── middleware/       # gRPC middleware (rate limiting)
+│   │   ├── db/                   # Database implementations
+│   │   │   └── postgres/         # PostgreSQL repository
+│   │   └── cache/                # Cache implementations
+│   │       └── user_cache.go     # Redis cache
+│   │
+│   └── config/                   # Configuration with validation
+│       └── config.go             # Config loading & validation
 │   │   ├── http/                 # HTTP handlers
 │   │   ├── db/                   # Database implementations
 │   │   │   └── postgres/         # PostgreSQL repository
@@ -346,6 +369,84 @@ Each layer has one reason to change:
 - **adapter/grpc**: gRPC protocol changes
 - **adapter/db**: Database schema changes
 
+## 🔧 Production Features
+
+### Config Validation
+
+Comprehensive validation at startup prevents runtime errors:
+
+```go
+// Validates 40+ rules including:
+- Required fields (DB_HOST, DB_USER, etc.)
+- Valid port numbers (1-65535)
+- Positive values for pool sizes
+- Log level: debug/info/warn/error
+- Shutdown timeout: 1-300 seconds
+```
+
+**Example Error Messages:**
+
+```bash
+$ export GRPC_PORT=99999
+$ go run cmd/api/main.go
+Error: config validation failed: GRPC_PORT is invalid: port must be between 1 and 65535, got 99999
+
+$ unset DB_HOST
+$ go run cmd/api/main.go
+Error: config validation failed: DB_HOST is required
+```
+
+### Graceful Shutdown
+
+Configurable timeout for different environments:
+
+```env
+# Development: fast iteration
+SHUTDOWN_TIMEOUT_SECONDS=10
+
+# Staging
+SHUTDOWN_TIMEOUT_SECONDS=30
+
+# Production: graceful drain
+SHUTDOWN_TIMEOUT_SECONDS=60
+```
+
+**Shutdown Sequence:**
+
+1. Receive SIGTERM/SIGINT
+2. Stop accepting new requests
+3. Wait for in-flight requests (up to timeout)
+4. Close HTTP server
+5. Stop gRPC server gracefully
+6. Close database connections
+7. Close Redis connections
+8. Sync logger
+
+### Dependency Injection
+
+Centralized DI container for clean dependency management:
+
+```go
+// cmd/api/di/container.go
+type Container struct {
+    Config      *config.Config
+    Logger      *zap.Logger
+    DB          *gorm.DB
+    RedisClient *redisclient.Client
+    UserUC      *user.Usecase
+    RateLimiter *middleware.RateLimiter
+}
+```
+
+**Benefits:**
+
+- Single source of truth for dependencies
+- Easy to test with mocks
+- Clean resource cleanup
+- Fail-fast on invalid config
+
+---
+
 ## 🚀 Getting Started
 
 ### Prerequisites
@@ -353,7 +454,7 @@ Each layer has one reason to change:
 - Go 1.21+
 - Protocol Buffers compiler (`protoc`)
 - PostgreSQL 15+
-- Redis 7+ (optional, for caching)
+- Redis 7+ (for caching and rate limiting)
 
 ### Installation
 
@@ -697,20 +798,38 @@ redis-cli KEYS "ratelimit:*"
 
 ## 📚 Project Roadmap
 
-- [x] Clean Architecture foundation
+### ✅ Completed
+
+- [x] Clean Architecture foundation with DI container
+- [x] Dependency Injection layer (`cmd/api/di/`)
+- [x] Infrastructure layer (`cmd/api/infrastructure/`)
+- [x] Config validation (40+ rules, fail-fast)
+- [x] Graceful shutdown with configurable timeout
 - [x] gRPC + gRPC-Gateway
 - [x] Structured logging (Zap with production features)
 - [x] Redis caching layer
 - [x] Rate limiting (gRPC interceptor)
 - [x] PostgreSQL repository implementation
 - [x] Unit tests (34/34 passing)
+- [x] Lint compliance (0 issues)
+- [x] Panic recovery in app and server goroutines
+- [x] Context-aware shutdown with timeout
+
+### 🚧 In Progress
+
+- [ ] Health checks (`/health/live`, `/health/ready`)
+- [ ] Metrics endpoint (Prometheus)
+
+### 📋 Planned
+
 - [ ] Distributed tracing (OpenTelemetry)
-- [ ] Metrics (Prometheus)
-- [ ] Docker Compose setup
-- [ ] Database migrations
 - [ ] Integration tests
 - [ ] Load testing (k6)
-- [ ] CI/CD pipeline
+- [ ] CI/CD pipeline (GitHub Actions)
+- [ ] Docker Compose setup improvements
+- [ ] Kubernetes manifests
+- [ ] API versioning
+- [ ] Circuit breaker pattern
 
 ## 🤝 Contributing
 

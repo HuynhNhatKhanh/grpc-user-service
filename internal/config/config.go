@@ -34,8 +34,9 @@ type DatabaseConfig struct {
 // AppConfig holds configuration parameters for the application servers.
 // It includes ports for both gRPC and HTTP servers.
 type AppConfig struct {
-	GRPCPort string `mapstructure:"GRPC_PORT"` // Port for gRPC server
-	HTTPPort string `mapstructure:"HTTP_PORT"` // Port for HTTP REST gateway
+	GRPCPort               string `mapstructure:"GRPC_PORT"`                // Port for gRPC server
+	HTTPPort               string `mapstructure:"HTTP_PORT"`                // Port for HTTP REST gateway
+	ShutdownTimeoutSeconds int    `mapstructure:"SHUTDOWN_TIMEOUT_SECONDS"` // Graceful shutdown timeout in seconds
 }
 
 // LoggerConfig holds configuration parameters for the logging system.
@@ -109,6 +110,7 @@ func LoadConfig(path string) (*Config, error) {
 
 	config.App.GRPCPort = viper.GetString("GRPC_PORT")
 	config.App.HTTPPort = viper.GetString("HTTP_PORT")
+	config.App.ShutdownTimeoutSeconds = viper.GetInt("SHUTDOWN_TIMEOUT_SECONDS")
 
 	config.Logger.Level = viper.GetString("LOG_LEVEL")
 	config.Logger.Format = viper.GetString("LOG_FORMAT")
@@ -151,6 +153,7 @@ func setDefaults() {
 
 	viper.SetDefault("GRPC_PORT", "50051")
 	viper.SetDefault("HTTP_PORT", "8080")
+	viper.SetDefault("SHUTDOWN_TIMEOUT_SECONDS", 30)
 
 	// Logger defaults
 	env := viper.GetString("APP_ENV")
@@ -182,6 +185,170 @@ func setDefaults() {
 	viper.SetDefault("RATE_LIMIT_REQUESTS_PER_SECOND", 10.0)
 	viper.SetDefault("RATE_LIMIT_WINDOW_SECONDS", 1)
 	viper.SetDefault("RATE_LIMIT_ENABLED", true)
+}
+
+// Validate validates all configuration parameters.
+// It checks for required fields, valid ranges, and logical consistency.
+// Returns an error if any validation fails.
+func (c *Config) Validate() error {
+	if err := c.DB.Validate(); err != nil {
+		return err
+	}
+	if err := c.App.Validate(); err != nil {
+		return err
+	}
+	if err := c.Logger.Validate(); err != nil {
+		return err
+	}
+	if err := c.Redis.Validate(); err != nil {
+		return err
+	}
+	if err := c.RateLimit.Validate(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// Validate validates database configuration
+func (c *DatabaseConfig) Validate() error {
+	if c.Host == "" {
+		return fmt.Errorf("DB_HOST is required")
+	}
+	if c.Port == "" {
+		return fmt.Errorf("DB_PORT is required")
+	}
+	if err := validatePort(c.Port); err != nil {
+		return fmt.Errorf("DB_PORT is invalid: %w", err)
+	}
+	if c.User == "" {
+		return fmt.Errorf("DB_USER is required")
+	}
+	if c.Name == "" {
+		return fmt.Errorf("DB_NAME is required")
+	}
+	if c.MaxOpenConns <= 0 {
+		return fmt.Errorf("DB_MAX_OPEN_CONNS must be positive, got %d", c.MaxOpenConns)
+	}
+	if c.MaxIdleConns <= 0 {
+		return fmt.Errorf("DB_MAX_IDLE_CONNS must be positive, got %d", c.MaxIdleConns)
+	}
+	if c.MaxIdleConns > c.MaxOpenConns {
+		return fmt.Errorf("DB_MAX_IDLE_CONNS (%d) cannot exceed DB_MAX_OPEN_CONNS (%d)",
+			c.MaxIdleConns, c.MaxOpenConns)
+	}
+	if c.ConnMaxLifetime <= 0 {
+		return fmt.Errorf("DB_CONN_MAX_LIFETIME must be positive, got %d", c.ConnMaxLifetime)
+	}
+	if c.ConnMaxIdleTime <= 0 {
+		return fmt.Errorf("DB_CONN_MAX_IDLE_TIME must be positive, got %d", c.ConnMaxIdleTime)
+	}
+	return nil
+}
+
+// Validate validates app configuration
+func (c *AppConfig) Validate() error {
+	if c.GRPCPort == "" {
+		return fmt.Errorf("GRPC_PORT is required")
+	}
+	if err := validatePort(c.GRPCPort); err != nil {
+		return fmt.Errorf("GRPC_PORT is invalid: %w", err)
+	}
+	if c.HTTPPort == "" {
+		return fmt.Errorf("HTTP_PORT is required")
+	}
+	if err := validatePort(c.HTTPPort); err != nil {
+		return fmt.Errorf("HTTP_PORT is invalid: %w", err)
+	}
+	if c.ShutdownTimeoutSeconds <= 0 {
+		return fmt.Errorf("SHUTDOWN_TIMEOUT_SECONDS must be positive, got %d", c.ShutdownTimeoutSeconds)
+	}
+	if c.ShutdownTimeoutSeconds > 300 {
+		return fmt.Errorf("SHUTDOWN_TIMEOUT_SECONDS cannot exceed 300 seconds (5 minutes), got %d", c.ShutdownTimeoutSeconds)
+	}
+	return nil
+}
+
+// Validate validates logger configuration
+func (c *LoggerConfig) Validate() error {
+	validLogLevels := map[string]bool{"debug": true, "info": true, "warn": true, "error": true}
+	if !validLogLevels[c.Level] {
+		return fmt.Errorf("LOG_LEVEL must be one of [debug, info, warn, error], got %s", c.Level)
+	}
+	validLogFormats := map[string]bool{"console": true, "json": true}
+	if !validLogFormats[c.Format] {
+		return fmt.Errorf("LOG_FORMAT must be one of [console, json], got %s", c.Format)
+	}
+	if c.SlowQuerySeconds < 0 {
+		return fmt.Errorf("LOG_SLOW_QUERY_SECONDS cannot be negative, got %f", c.SlowQuerySeconds)
+	}
+	if c.ServiceName == "" {
+		return fmt.Errorf("SERVICE_NAME is required")
+	}
+	if c.ServiceVersion == "" {
+		return fmt.Errorf("SERVICE_VERSION is required")
+	}
+	return nil
+}
+
+// Validate validates Redis configuration
+func (c *RedisConfig) Validate() error {
+	if c.Host == "" {
+		return fmt.Errorf("REDIS_HOST is required")
+	}
+	if c.Port == "" {
+		return fmt.Errorf("REDIS_PORT is required")
+	}
+	if err := validatePort(c.Port); err != nil {
+		return fmt.Errorf("REDIS_PORT is invalid: %w", err)
+	}
+	if c.DB < 0 {
+		return fmt.Errorf("REDIS_DB cannot be negative, got %d", c.DB)
+	}
+	if c.CacheTTL <= 0 {
+		return fmt.Errorf("REDIS_CACHE_TTL_SECONDS must be positive, got %d", c.CacheTTL)
+	}
+	if c.MaxRetries < 0 {
+		return fmt.Errorf("REDIS_MAX_RETRIES cannot be negative, got %d", c.MaxRetries)
+	}
+	if c.PoolSize <= 0 {
+		return fmt.Errorf("REDIS_POOL_SIZE must be positive, got %d", c.PoolSize)
+	}
+	if c.MinIdleConn < 0 {
+		return fmt.Errorf("REDIS_MIN_IDLE_CONN cannot be negative, got %d", c.MinIdleConn)
+	}
+	if c.MinIdleConn > c.PoolSize {
+		return fmt.Errorf("REDIS_MIN_IDLE_CONN (%d) cannot exceed REDIS_POOL_SIZE (%d)",
+			c.MinIdleConn, c.PoolSize)
+	}
+	return nil
+}
+
+// Validate validates rate limit configuration
+func (c *RateLimitConfig) Validate() error {
+	if !c.Enabled {
+		return nil
+	}
+	if c.RequestsPerSecond <= 0 {
+		return fmt.Errorf("RATE_LIMIT_REQUESTS_PER_SECOND must be positive when rate limiting is enabled, got %f",
+			c.RequestsPerSecond)
+	}
+	if c.WindowSeconds <= 0 {
+		return fmt.Errorf("RATE_LIMIT_WINDOW_SECONDS must be positive when rate limiting is enabled, got %d",
+			c.WindowSeconds)
+	}
+	return nil
+}
+
+// validatePort checks if a port string is a valid port number (1-65535).
+func validatePort(port string) error {
+	var portNum int
+	if _, err := fmt.Sscanf(port, "%d", &portNum); err != nil {
+		return fmt.Errorf("port must be a number, got %s", port)
+	}
+	if portNum < 1 || portNum > 65535 {
+		return fmt.Errorf("port must be between 1 and 65535, got %d", portNum)
+	}
+	return nil
 }
 
 // DSN returns the PostgreSQL Data Source Name string.
