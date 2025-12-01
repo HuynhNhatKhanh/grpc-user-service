@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 
@@ -8,16 +9,26 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
+	"google.golang.org/grpc/status"
 )
+
+// UserUsecase defines the interface for user business logic
+type UserUsecase interface {
+	CreateUser(ctx context.Context, req user.CreateUserRequest) (*user.CreateUserResponse, error)
+	GetUser(ctx context.Context, req user.GetUserRequest) (*user.GetUserResponse, error)
+	UpdateUser(ctx context.Context, req user.UpdateUserRequest) (*user.UpdateUserResponse, error)
+	DeleteUser(ctx context.Context, req user.DeleteUserRequest) (*user.DeleteUserResponse, error)
+	ListUsers(ctx context.Context, req user.ListUsersRequest) (*user.ListUsersResponse, error)
+}
 
 // UserHandler handles HTTP requests for user operations
 type UserHandler struct {
-	uc  *user.Usecase
+	uc  UserUsecase
 	log *zap.Logger
 }
 
 // NewUserHandler creates a new UserHandler instance
-func NewUserHandler(uc *user.Usecase, log *zap.Logger) *UserHandler {
+func NewUserHandler(uc UserUsecase, log *zap.Logger) *UserHandler {
 	return &UserHandler{
 		uc:  uc,
 		log: log,
@@ -258,7 +269,7 @@ func (h *UserHandler) ListUsers(c *gin.Context) {
 func (h *UserHandler) handleError(c *gin.Context, err error) {
 	// Check for custom error types from pkg/errors
 	type grpcStatuser interface {
-		GRPCStatus() any
+		GRPCStatus() *status.Status
 	}
 
 	if _, ok := err.(grpcStatuser); ok {
