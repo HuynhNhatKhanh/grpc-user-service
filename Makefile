@@ -1,6 +1,6 @@
 SHELL := bash
 
-.PHONY: help install-tools proto clean-proto regen-proto buf-dep-update buf-mod-update lint-proto lint format test run build version docker-build docker-up docker-down docker-logs clean migrate-up migrate-down migrate-force migrate-create
+.PHONY: help install-tools proto clean-proto regen-proto buf-dep-update buf-mod-update lint-proto lint format test benchmark benchmark-config benchmark-save benchmark-grpc benchmark-rest benchmark-cpu benchmark-mem run build version docker-build docker-up docker-down docker-logs clean migrate-up migrate-down migrate-force migrate-create
 
 # Default target - show help
 help:
@@ -15,6 +15,13 @@ help:
 	@echo "  lint               - Run golangci-lint"
 	@echo "  format             - Format Go code"
 	@echo "  test               - Run tests"
+	@echo "  benchmark          - Run performance benchmarks"
+	@echo "  benchmark-config   - Run benchmarks with custom configuration"
+	@echo "  benchmark-save     - Run benchmarks and save results to file"
+	@echo "  benchmark-grpc     - Run gRPC benchmarks only"
+	@echo "  benchmark-rest     - Run REST benchmarks only"
+	@echo "  benchmark-cpu      - Run benchmarks with CPU profiling"
+	@echo "  benchmark-mem      - Run benchmarks with memory profiling"
 	@echo "  run                - Run the application locally"
 	@echo "  build              - Build the application binary"
 	@echo "  migrate-up         - Apply all pending migrations"
@@ -84,6 +91,36 @@ test:
 # Run tests with coverage report
 test-coverage: test
 	go tool cover -html=coverage.out -o coverage.html
+
+# Run performance benchmarks
+benchmark:
+	go test -bench=. -benchmem ./test/benchmark/...
+
+# Run benchmarks with custom configuration
+benchmark-config:
+	cd test/benchmark && go run main.go -duration=30s -concurrency=10
+
+# Run benchmarks and save results
+benchmark-save:
+	cd test/benchmark && go run main.go -duration=30s -concurrency=10 -output=json -file=benchmark-results.json
+
+# Run gRPC benchmarks only
+benchmark-grpc:
+	go test -bench=BenchmarkGRPC -benchmem ./test/benchmark/...
+
+# Run REST benchmarks only
+benchmark-rest:
+	go test -bench=BenchmarkREST -benchmem ./test/benchmark/...
+
+# Run benchmarks with CPU profiling
+benchmark-cpu:
+	go test -bench=. -cpuprofile=cpu.prof -benchmem ./test/benchmark/...
+	go tool pprof cpu.prof
+
+# Run benchmarks with memory profiling
+benchmark-mem:
+	go test -bench=. -memprofile=mem.prof -benchmem ./test/benchmark/...
+	go tool pprof mem.prof
 
 # Run the application locally
 run:
