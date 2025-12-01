@@ -1,260 +1,95 @@
 # Performance Benchmarks
 
-This document outlines the performance benchmarking framework for the gRPC User Service, including expected targets, test procedures, and result interpretation.
+## ⚡ Performance Testing
 
-## 📊 Performance Targets
+### Benchmark Overview
 
-### Expected Performance Metrics
+This project includes **comprehensive performance testing** comparing **three API protocols**:
 
-| Metric        | gRPC       | Gin REST  | REST (Gateway) |
-| ------------- | ---------- | --------- | -------------- |
-| Latency (p50) | ~100µs     | ~400µs    | ~440µs         |
-| Latency (p99) | ~450µs     | ~1.1ms    | ~1.2ms         |
-| Throughput    | ~20k req/s | ~3k req/s | ~2.5k req/s    |
+- **gRPC** - Binary protocol with HTTP/2
+- **Gin REST API** - HTTP/1.1 with JSON
+- **gRPC-Gateway REST** - HTTP/1.1 JSON via gRPC translation
 
-### Detailed Latency Targets
+### Test Results (Mac mini M4)
 
-| Percentile | gRPC Target | REST Target |
-| ---------- | ----------- | ----------- |
-| P50        | < 200µs     | < 500µs     |
-| P90        | < 300µs     | < 800µs     |
-| P95        | < 400µs     | < 1ms       |
-| P99        | < 500µs     | < 1.5ms     |
-| P99.9      | < 1ms       | < 2ms       |
+**Performance Leaderboard (CreateUser operation):**
 
-## 🧪 Benchmark Suite
+| Protocol         | Latency (ns/op) | Throughput (ops/sec) | Memory (B/op) | Efficiency |
+| ---------------- | --------------- | -------------------- | ------------- | ---------- |
+| **gRPC**         | 101,635         | 9,838                | 13,035        | 🥇 Best    |
+| **Gin REST**     | 401,614         | 2,488                | 43,108        | 🥈 Good    |
+| **REST Gateway** | 442,655         | 2,259                | 56,006        | 🥉 OK      |
 
-### Test Categories
+**Key Insights:**
 
-#### 1. CRUD Operations
+- gRPC is **4x faster** than REST APIs
+- gRPC uses **3x less memory** than REST APIs
+- All protocols share **identical business logic** (Clean Architecture)
+- Performance difference purely from transport layer
 
-- **CreateUser**: Tests user creation performance
-- **GetUser**: Tests single user retrieval
-- **UpdateUser**: Tests user modification
-- **DeleteUser**: Tests user deletion
-- **ListUsers**: Tests paginated user listing
-
-#### 2. Mixed Workload
-
-- **MixedWorkload**: Simulates real-world usage patterns with 25% create, 25% read, 25% update, 25% list operations
-
-### Protocol Comparison
-
-#### gRPC Benchmarks
-
-- Direct gRPC client communication
-- Binary protocol efficiency
-- Connection pooling and multiplexing
-
-#### REST Benchmarks
-
-- HTTP/JSON via gRPC-Gateway
-- Additional serialization overhead
-- HTTP request/response processing
-
-## 🚀 Running Benchmarks
-
-### Quick Start
+### Run Performance Tests
 
 ```bash
-# Run all benchmarks with default settings
-go test -bench=. ./test/benchmark/...
+# Quick benchmark comparison
+make benchmark
 
-# Run specific benchmark
-go test -bench=BenchmarkGRPC_CreateUser ./test/benchmark/
+# Individual protocol tests
+make benchmark-grpc     # gRPC only
+make benchmark-gin      # Gin REST only
+make benchmark-rest     # gRPC-Gateway only
 
-# Run with detailed output
-go test -bench=. -benchmem ./test/benchmark/
+# Advanced profiling
+make benchmark-cpu      # CPU profiling
+make benchmark-mem      # Memory profiling
 ```
 
-### Advanced Benchmark Runner
+## 📊 Detailed Benchmark Results
 
-```go
-package main
+**Complete performance testing framework with detailed metrics collection.**
 
-import (
-    "fmt"
-    "grpc-user-service/test/benchmark"
-    "time"
-)
-
-func main() {
-    config := &benchmark.BenchmarkConfig{
-        Duration:         30 * time.Second,
-        Concurrency:      10,
-        WarmupDuration:   5 * time.Second,
-        OutputFormat:     "json",
-        OutputFile:       "benchmark-results.json",
-        EnableWarmup:     true,
-    }
-
-    runner := benchmark.NewBenchmarkRunner(config)
-    reports, err := runner.RunAllBenchmarks()
-    if err != nil {
-        panic(err)
-    }
-
-    fmt.Printf("Completed %d benchmark tests\n", len(reports))
-}
-```
-
-### Configuration Options
-
-| Parameter      | Default | Description                      |
-| -------------- | ------- | -------------------------------- |
-| Duration       | 30s     | Benchmark execution time         |
-| Concurrency    | 10      | Number of concurrent workers     |
-| WarmupDuration | 5s      | Warmup period before measurement |
-| OutputFormat   | table   | Output format (table/json)       |
-| OutputFile     | ""      | File to save results (optional)  |
-| EnableWarmup   | true    | Enable warmup phase              |
-
-## 📈 Result Interpretation
-
-### Metrics Explained
-
-#### Latency Metrics
-
-- **Min/Max**: Fastest and slowest request times
-- **Mean**: Average request time
-- **P50**: Median request time (50th percentile)
-- **P90**: 90% of requests complete faster
-- **P95**: 95% of requests complete faster
-- **P99**: 99% of requests complete faster
-- **P99.9**: 99.9% of requests complete faster
-
-#### Throughput Metrics
-
-- **Requests/sec**: Number of requests processed per second
-- **Total Requests**: Total number of successful requests
-- **Duration**: Total benchmark execution time
-
-#### Success Metrics
-
-- **Success Rate**: Percentage of successful requests
-- **Error Count**: Number of failed requests
-
-#### Go Benchmark Metrics
-
-| Metric         | Description                                                                |
-| -------------- | -------------------------------------------------------------------------- |
-| **Iterations** | Total number of times the operation was executed during the benchmark      |
-| **ns/op**      | Nanoseconds per operation (lower is better). Represents latency.           |
-| **B/op**       | Bytes allocated per operation (lower is better). Memory usage.             |
-| **allocs/op**  | Number of memory allocations per operation (lower is better). GC pressure. |
-
-### Performance Analysis
-
-#### Meeting Targets
-
-Results are checked against predefined targets:
-
-- ✅ **Green**: Meets or exceeds target
-- ❌ **Red**: Falls below target
-
-#### gRPC vs REST Comparison
-
-Typical performance differences:
-
-- **Latency**: gRPC typically 2-5x faster than REST
-- **Throughput**: gRPC typically 2-3x higher throughput
-- **CPU Usage**: gRPC more efficient due to binary protocol
-
-## 🛠️ Benchmark Implementation
-
-### Architecture
-
-```
-test/benchmark/
-├── grpc_benchmark_test.go    # gRPC-specific benchmarks
-├── rest_benchmark_test.go     # REST-specific benchmarks
-├── metrics_reporter.go       # Metrics collection and reporting
-├── benchmark_runner.go       # Orchestrates benchmark execution
-└── performance_benchmarks.md # This documentation
-```
-
-### Implementation Notes
-
-**Two Ways to Run Benchmarks:**
-
-1. **Go Test Benchmarks** (`*_test.go` files)
-
-   - Uses Go's built-in `testing.B` framework
-   - Runs actual gRPC/REST calls against real servers
-   - Provides accurate performance measurements
-   - Run via: `go test -bench=. ./test/benchmark/...`
-
-2. **Custom Benchmark Runner** (`benchmark_runner.go`, `main.go`)
-   - Orchestrates comprehensive benchmark suites
-   - Provides detailed metrics and comparison reports
-   - Currently uses simulated delays for demonstration
-   - Run via: `cd test/benchmark && go run main.go`
-
-> **Note**: The `benchmark_runner.go` currently uses `time.Sleep()` for demonstration. For production benchmarks, use the `*_test.go` files which make actual gRPC/REST calls.
-
-### Key Components
-
-#### MockRepository
-
-- In-memory user storage
-- Thread-safe operations
-- Realistic data patterns
-
-#### MetricsCollector
-
-- Records operation latencies
-- Calculates percentiles
-- Generates performance reports
-
-#### BenchmarkRunner
-
-- Manages concurrent execution
-- Handles warmup phases
-- Produces comparison reports
-
-## 📋 Test Environment
-
-### Actual Test Hardware
-
-Benchmarks were conducted on the following hardware:
+### Test Hardware
 
 - **Model**: Mac mini (2024)
-- **Chip**: Apple M4
-- **CPU**: 10 cores (4 performance + 6 efficiency)
+- **Chip**: Apple M4 (10 cores: 4P + 6E)
 - **Memory**: 16 GB
 - **OS**: macOS
-- **Go Version**: 1.21+
 
-### Recommended Minimum Setup
+### Detailed Results
 
-#### Hardware
+Results using in-memory mock repository (Mac mini M4):
 
-- **CPU**: 4+ cores
-- **Memory**: 8GB+ RAM
-- **Network**: Localhost (minimize network latency)
+#### gRPC Performance
 
-#### Software
+| Operation     | Iterations | ns/op   | B/op    | allocs/op |
+| ------------- | ---------- | ------- | ------- | --------- |
+| CreateUser    | 20,294     | 101,635 | 13,035  | 211       |
+| GetUser       | 38,239     | 45,293  | 7,150   | 116       |
+| UpdateUser    | 25,776     | 69,595  | 10,107  | 162       |
+| DeleteUser    | 31,639     | 50,849  | 7,367   | 126       |
+| ListUsers     | 14,755     | 137,324 | 29,804  | 334       |
+| MixedWorkload | 23,960     | 66,016  | 140,398 | 222       |
 
-- **Go**: 1.21+
-- **Database**: In-memory (for benchmarking)
-- **OS**: Linux/macOS (Windows may have different performance characteristics)
+#### Gin Performance
 
-### Environment Variables
+| Operation     | Iterations | ns/op   | B/op    | allocs/op |
+| ------------- | ---------- | ------- | ------- | --------- |
+| CreateUser    | 3,004      | 401,614 | 43,108  | 289       |
+| GetUser       | 4,894      | 269,096 | 27,503  | 194       |
+| UpdateUser    | 2,888      | 417,279 | 53,288  | 292       |
+| DeleteUser    | 3,438      | 347,963 | 29,699  | 204       |
+| ListUsers     | 2,289      | 552,127 | 110,250 | 505       |
+| MixedWorkload | 1,509      | 835,735 | 77,921  | 286       |
 
-```bash
-# Benchmark configuration
-BENCHMARK_DURATION=30s
-BENCHMARK_CONCURRENCY=10
-BENCHMARK_WARMUP=5s
-BENCHMARK_OUTPUT=json
-BENCHMARK_FILE=results.json
+#### REST (gRPC-Gateway) Performance
 
-# Performance tuning
-GOMAXPROCS=4
-GOGC=100
-```
-
-### Sample Benchmark Results
+| Operation     | Iterations | ns/op   | B/op    | allocs/op |
+| ------------- | ---------- | ------- | ------- | --------- |
+| CreateUser    | 2,533      | 442,655 | 56,006  | 344       |
+| GetUser       | 4,212      | 286,571 | 36,940  | 241       |
+| UpdateUser    | 2,472      | 477,212 | 66,187  | 347       |
+| DeleteUser    | 3,343      | 357,497 | 39,137  | 251       |
+| ListUsers     | 1,963      | 638,634 | 127,117 | 559       |
+| MixedWorkload | 1,315      | 979,219 | 93,698  | 535       |
 
 #### Performance Comparison
 
@@ -263,187 +98,13 @@ GOGC=100
 - **Memory**: gRPC uses significantly less memory and allocations
 - **Consistency**: All protocols maintain 100% success rate under load
 
+#### Metrics Explanation
+
+| Metric         | Description                                                                |
+| -------------- | -------------------------------------------------------------------------- |
+| **Iterations** | Total number of times the operation was executed during the benchmark      |
+| **ns/op**      | Nanoseconds per operation (lower is better). Represents latency.           |
+| **B/op**       | Bytes allocated per operation (lower is better). Memory usage.             |
+| **allocs/op**  | Number of memory allocations per operation (lower is better). GC pressure. |
+
 > **Note**: These results use in-memory mock repository. Real database operations will have higher latencies depending on database performance and network conditions.
-
-## 🔧 Performance Optimization
-
-### gRPC Optimizations
-
-#### Connection Pooling
-
-```go
-// Use connection pooling for better performance
-conn, err := grpc.Dial(
-    address,
-    grpc.WithTransportCredentials(insecure.NewCredentials()),
-    grpc.WithKeepaliveParams(keepalive.ClientParameters{
-        Time:                10 * time.Second,
-        Timeout:             3 * time.Second,
-        PermitWithoutStream: true,
-    }),
-)
-```
-
-#### Stream Compression
-
-```go
-// Enable compression for large payloads
-conn, err := grpc.Dial(
-    address,
-    grpc.WithDefaultCallOptions(
-        grpc.UseCompressor(gzip.Name),
-    ),
-)
-```
-
-### REST Optimizations
-
-#### HTTP/2 Configuration
-
-```go
-// Enable HTTP/2 for better performance
-server := &http.Server{
-    ReadHeaderTimeout: 10 * time.Second,
-    IdleTimeout:       120 * time.Second,
-}
-```
-
-#### Response Compression
-
-```go
-// Enable gzip compression
-mux := runtime.NewServeMux(
-    runtime.WithIncomingHeaderMatcher(func(key string) bool {
-        return true
-    }),
-)
-```
-
-## 📊 Continuous Monitoring
-
-### CI/CD Integration
-
-#### GitHub Actions
-
-```yaml
-name: Performance Tests
-on: [push, pull_request]
-
-jobs:
-  benchmark:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-go@v3
-        with:
-          go-version: "1.21"
-
-      - name: Run benchmarks
-        run: |
-          go test -bench=. -benchmem ./test/benchmark/... > benchmark.txt
-
-      - name: Upload results
-        uses: actions/upload-artifact@v3
-        with:
-          name: benchmark-results
-          path: benchmark.txt
-```
-
-### Performance Regression Detection
-
-#### Alerting Thresholds
-
-- **Latency**: Alert if P99 increases by >20%
-- **Throughput**: Alert if throughput decreases by >15%
-- **Error Rate**: Alert if error rate >1%
-
-## 📚 Best Practices
-
-### Benchmark Design
-
-1. **Warmup**: Always include warmup phase
-2. **Duration**: Run long enough for statistical significance
-3. **Concurrency**: Test realistic concurrency levels
-4. **Repeatability**: Run multiple times for consistency
-
-### Result Analysis
-
-1. **Percentiles**: Focus on P95/P99, not just mean
-2. **Outliers**: Investigate extreme outliers
-3. **Trends**: Monitor performance over time
-4. **Context**: Consider test environment impact
-
-### Performance Targets
-
-1. **Realistic**: Set achievable targets
-2. **Use Case**: Base targets on actual requirements
-3. **Monitoring**: Track against targets continuously
-4. **Adjustment**: Update targets as needed
-
-## 🐛 Troubleshooting
-
-### Common Issues
-
-#### High Latency Variance
-
-- Check for GC pressure
-- Verify connection pooling
-- Monitor system resources
-
-#### Low Throughput
-
-- Increase concurrency
-- Check for bottlenecks
-- Optimize database queries
-
-#### Memory Issues
-
-- Monitor heap usage
-- Check for memory leaks
-- Optimize data structures
-
-### Debugging Tools
-
-#### Go Profiling
-
-```bash
-# CPU profiling
-go test -bench=. -cpuprofile=cpu.prof ./test/benchmark/
-
-# Memory profiling
-go test -bench=. -memprofile=mem.prof ./test/benchmark/
-
-# Trace profiling
-go test -bench=. -trace=trace.out ./test/benchmark/
-```
-
-#### Analysis
-
-```bash
-# Analyze CPU profile
-go tool pprof cpu.prof
-
-# Analyze memory profile
-go tool pprof mem.prof
-
-# View trace
-go tool trace trace.out
-```
-
-## 📈 Historical Performance
-
-### Version Comparison
-
-Track performance across versions:
-
-- v1.0.0: Baseline performance
-- v1.1.0: +15% throughput, -10% latency
-- v1.2.0: +8% throughput, -5% latency
-
-### Performance Trends
-
-Monitor long-term trends:
-
-- Weekly performance reports
-- Monthly regression analysis
-- Quarterly target adjustments
