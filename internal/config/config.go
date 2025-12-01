@@ -32,10 +32,11 @@ type DatabaseConfig struct {
 }
 
 // AppConfig holds configuration parameters for the application servers.
-// It includes ports for both gRPC and HTTP servers.
+// It includes ports for gRPC, HTTP gateway, and Gin REST API servers.
 type AppConfig struct {
 	GRPCPort               string `mapstructure:"GRPC_PORT"`                // Port for gRPC server
-	HTTPPort               string `mapstructure:"HTTP_PORT"`                // Port for HTTP REST gateway
+	HTTPPort               string `mapstructure:"HTTP_PORT"`                // Port for HTTP REST gateway (gRPC-Gateway)
+	GinPort                string `mapstructure:"GIN_PORT"`                 // Port for Gin REST API server
 	ShutdownTimeoutSeconds int    `mapstructure:"SHUTDOWN_TIMEOUT_SECONDS"` // Graceful shutdown timeout in seconds
 }
 
@@ -110,6 +111,7 @@ func LoadConfig(path string) (*Config, error) {
 
 	config.App.GRPCPort = viper.GetString("GRPC_PORT")
 	config.App.HTTPPort = viper.GetString("HTTP_PORT")
+	config.App.GinPort = viper.GetString("GIN_PORT")
 	config.App.ShutdownTimeoutSeconds = viper.GetInt("SHUTDOWN_TIMEOUT_SECONDS")
 
 	config.Logger.Level = viper.GetString("LOG_LEVEL")
@@ -153,6 +155,7 @@ func setDefaults() {
 
 	viper.SetDefault("GRPC_PORT", "50051")
 	viper.SetDefault("HTTP_PORT", "8080")
+	viper.SetDefault("GIN_PORT", "9090")
 	viper.SetDefault("SHUTDOWN_TIMEOUT_SECONDS", 30)
 
 	// Logger defaults
@@ -258,6 +261,12 @@ func (c *AppConfig) Validate() error {
 	}
 	if err := validatePort(c.HTTPPort); err != nil {
 		return fmt.Errorf("HTTP_PORT is invalid: %w", err)
+	}
+	if c.GinPort == "" {
+		return fmt.Errorf("GIN_PORT is required")
+	}
+	if err := validatePort(c.GinPort); err != nil {
+		return fmt.Errorf("GIN_PORT is invalid: %w", err)
 	}
 	if c.ShutdownTimeoutSeconds <= 0 {
 		return fmt.Errorf("SHUTDOWN_TIMEOUT_SECONDS must be positive, got %d", c.ShutdownTimeoutSeconds)

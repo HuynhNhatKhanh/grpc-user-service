@@ -1,6 +1,6 @@
 SHELL := bash
 
-.PHONY: help install-tools proto clean-proto regen-proto buf-dep-update buf-mod-update lint-proto lint format test benchmark benchmark-config benchmark-save benchmark-grpc benchmark-rest benchmark-cpu benchmark-mem run build version docker-build docker-up docker-down docker-logs clean migrate-up migrate-down migrate-force migrate-create
+.PHONY: help install-tools proto clean-proto regen-proto buf-dep-update buf-mod-update lint-proto lint format test benchmark benchmark-config benchmark-save benchmark-grpc benchmark-rest benchmark-gin benchmark-cpu benchmark-mem run build version docker-build docker-up docker-down docker-logs clean migrate-up migrate-down migrate-force migrate-create
 
 # Default target - show help
 help:
@@ -20,6 +20,7 @@ help:
 	@echo "  benchmark-save     - Run benchmarks and save results to file"
 	@echo "  benchmark-grpc     - Run gRPC benchmarks only"
 	@echo "  benchmark-rest     - Run REST benchmarks only"
+	@echo "  benchmark-gin      - Run Gin benchmarks only"
 	@echo "  benchmark-cpu      - Run benchmarks with CPU profiling"
 	@echo "  benchmark-mem      - Run benchmarks with memory profiling"
 	@echo "  run                - Run the application locally"
@@ -111,6 +112,10 @@ benchmark-grpc:
 # Run REST benchmarks only
 benchmark-rest:
 	go test -bench=BenchmarkREST -benchmem ./test/benchmark/...
+
+# Run Gin benchmarks only
+benchmark-gin:
+	go test -bench=BenchmarkGin -benchmem ./test/benchmark/...
 
 # Run benchmarks with CPU profiling
 benchmark-cpu:

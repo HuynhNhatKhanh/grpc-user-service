@@ -5,142 +5,100 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net"
 	"net/http"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	pb "grpc-user-service/api/gen/go/user"
-	grpcadapter "grpc-user-service/internal/adapter/grpc"
+	ginhandler "grpc-user-service/internal/adapter/gin/handler"
+	ginrouter "grpc-user-service/internal/adapter/gin/router"
 	"grpc-user-service/internal/usecase/user"
+	redisclient "grpc-user-service/pkg/redis"
 
-	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap/zaptest"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
-// REST Benchmark Server setup
-type RESTBenchmarkServer struct {
-	httpServer *http.Server
-	grpcServer *grpc.Server
-	httpClient *http.Client
-	baseURL    string
-	listener   net.Listener
-	conn       *grpc.ClientConn
+// Gin Benchmark Server setup
+type GinBenchmarkServer struct {
+	httpServer  *http.Server
+	httpClient  *http.Client
+	baseURL     string
+	redisClient *redis.Client
 }
 
-// Global counter to ensure unique ports for REST benchmarks
-var restPortCounter int64 = 40000
+// Global counter to ensure unique ports for Gin benchmarks
+var ginPortCounter int64 = 30000
 
-func setupRESTBenchmarkServer(b *testing.B) *RESTBenchmarkServer {
+func setupGinBenchmarkServer(b *testing.B) *GinBenchmarkServer {
 	logger := zaptest.NewLogger(b)
 	mockRepo := NewMockRepository()
 	userUsecase := user.New(mockRepo, nil, logger)
 
+	// Setup Redis client (mock for benchmarking)
+	rdb := redis.NewClient(&redis.Options{
+		Addr: "localhost:6379",
+		DB:   15, // Use separate DB for benchmarks
+	})
+
+	redisClientWrapper := &redisclient.Client{
+		Client: rdb,
+	}
+
+	// Create Gin handler
+	ginHandler := ginhandler.NewUserHandler(userUsecase, logger)
+
+	// Setup Gin router
+	router := ginrouter.SetupRouter(ginHandler, nil, redisClientWrapper, logger)
+
 	// Get unique port using atomic counter
-	grpcPort := atomic.AddInt64(&restPortCounter, 1)
-	if grpcPort > 45000 {
-		grpcPort = atomic.AddInt64(&restPortCounter, -5000) // Reset if too high
-	}
-	httpPort := grpcPort + 1000
-	if httpPort > 65535 {
-		httpPort = grpcPort + 500 // Ensure valid HTTP port
-	}
-
-	// Start gRPC server
-	grpcServer := grpc.NewServer()
-	pb.RegisterUserServiceServer(grpcServer, grpcadapter.NewUserServiceServer(userUsecase, logger))
-
-	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", grpcPort))
-	if err != nil {
-		b.Fatalf("Failed to listen: %v", err)
-	}
-
-	go func() {
-		if err := grpcServer.Serve(listener); err != nil {
-			b.Logf("gRPC server error: %v", err)
-		}
-	}()
-	mux := runtime.NewServeMux()
-	err = pb.RegisterUserServiceHandlerFromEndpoint(
-		context.Background(),
-		mux,
-		fmt.Sprintf("localhost:%d", grpcPort),
-		[]grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())},
-	)
-	if err != nil {
-		b.Fatalf("Failed to register gateway: %v", err)
+	port := atomic.AddInt64(&ginPortCounter, 1)
+	if port > 35000 {
+		port = atomic.AddInt64(&ginPortCounter, -5000) // Reset if too high
 	}
 
 	// Start HTTP server
 	httpServer := &http.Server{
+		Addr:              fmt.Sprintf(":%d", port),
+		Handler:           router,
 		ReadHeaderTimeout: 10 * time.Second,
-		Addr:              fmt.Sprintf(":%d", httpPort),
-		Handler:           mux,
 	}
 
 	go func() {
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			b.Logf("HTTP server error: %v", err)
+			b.Logf("Gin server error: %v", err)
 		}
 	}()
 
-	// Wait for servers to start
-	time.Sleep(1000 * time.Millisecond)
-
-	// Setup HTTP client
+	// Setup HTTP client first
 	httpClient := &http.Client{
 		Timeout: 10 * time.Second,
 	}
 
-	// Create gRPC connection for gateway with retries
-	var conn *grpc.ClientConn
-	var connErr error
-	for i := 0; i < 5; i++ {
-		conn, connErr = grpc.NewClient(
-			fmt.Sprintf("localhost:%d", grpcPort),
-			grpc.WithTransportCredentials(insecure.NewCredentials()),
-		)
-		if connErr == nil {
-			break
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	if connErr != nil {
-		b.Fatalf("Failed to connect to gRPC server after retries: %v", connErr)
-	}
+	// Wait for server to start with extra time
+	time.Sleep(1000 * time.Millisecond)
 
-	return &RESTBenchmarkServer{
-		httpServer: httpServer,
-		grpcServer: grpcServer,
-		httpClient: httpClient,
-		baseURL:    fmt.Sprintf("http://localhost:%d", httpPort),
-		listener:   listener,
-		conn:       conn,
+	return &GinBenchmarkServer{
+		httpServer:  httpServer,
+		httpClient:  httpClient,
+		baseURL:     fmt.Sprintf("http://localhost:%d", port),
+		redisClient: rdb,
 	}
 }
 
-func (rs *RESTBenchmarkServer) Close() {
-	if rs.httpServer != nil {
+func (gs *GinBenchmarkServer) Close() {
+	if gs.httpServer != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		rs.httpServer.Shutdown(ctx)
+		gs.httpServer.Shutdown(ctx)
 		cancel()
 	}
-	if rs.conn != nil {
-		rs.conn.Close()
-	}
-	if rs.grpcServer != nil {
-		rs.grpcServer.GracefulStop()
-	}
-	if rs.listener != nil {
-		rs.listener.Close()
+	if gs.redisClient != nil {
+		gs.redisClient.Close()
 	}
 }
 
 // Helper method to make HTTP requests
-func (rs *RESTBenchmarkServer) makeRequest(method, endpoint string, body interface{}) (*http.Response, error) {
+func (gs *GinBenchmarkServer) makeRequest(method, endpoint string, body interface{}) (*http.Response, error) {
 	var reqBody *bytes.Buffer
 	if body != nil {
 		jsonBody, err := json.Marshal(body)
@@ -152,7 +110,7 @@ func (rs *RESTBenchmarkServer) makeRequest(method, endpoint string, body interfa
 		reqBody = bytes.NewBuffer(nil)
 	}
 
-	req, err := http.NewRequestWithContext(context.Background(), method, rs.baseURL+endpoint, reqBody)
+	req, err := http.NewRequestWithContext(context.Background(), method, gs.baseURL+endpoint, reqBody)
 	if err != nil {
 		return nil, err
 	}
@@ -161,14 +119,14 @@ func (rs *RESTBenchmarkServer) makeRequest(method, endpoint string, body interfa
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	return rs.httpClient.Do(req)
+	return gs.httpClient.Do(req)
 }
 
-// REST Benchmark Tests
+// Gin Benchmark Tests
 
-func BenchmarkREST_CreateUser(b *testing.B) {
-	rs := setupRESTBenchmarkServer(b)
-	defer rs.Close()
+func BenchmarkGin_CreateUser(b *testing.B) {
+	gs := setupGinBenchmarkServer(b)
+	defer gs.Close()
 
 	var counter int64
 	b.ResetTimer()
@@ -182,7 +140,7 @@ func BenchmarkREST_CreateUser(b *testing.B) {
 				"email": fmt.Sprintf("user_%d@example.com", id),
 			}
 
-			resp, err := rs.makeRequest("POST", "/v1/users", requestBody)
+			resp, err := gs.makeRequest("POST", "/v1/users", requestBody)
 			if err != nil {
 				b.Errorf("Request failed: %v", err)
 				continue
@@ -196,16 +154,16 @@ func BenchmarkREST_CreateUser(b *testing.B) {
 	})
 }
 
-func BenchmarkREST_GetUser(b *testing.B) {
-	rs := setupRESTBenchmarkServer(b)
-	defer rs.Close()
+func BenchmarkGin_GetUser(b *testing.B) {
+	gs := setupGinBenchmarkServer(b)
+	defer gs.Close()
 
 	// Pre-create a user for testing
 	requestBody := map[string]interface{}{
 		"name":  "Test User",
 		"email": "test@example.com",
 	}
-	resp, err := rs.makeRequest("POST", "/v1/users", requestBody)
+	resp, err := gs.makeRequest("POST", "/v1/users", requestBody)
 	if err != nil {
 		b.Fatalf("Failed to create test user: %v", err)
 	}
@@ -215,17 +173,14 @@ func BenchmarkREST_GetUser(b *testing.B) {
 	if err := json.NewDecoder(resp.Body).Decode(&createResp); err != nil {
 		b.Fatalf("Failed to decode create response: %v", err)
 	}
-	userID, ok := createResp["id"].(string)
-	if !ok {
-		b.Fatalf("Response does not contain valid id: %v", createResp)
-	}
+	userID := fmt.Sprintf("%.0f", createResp["id"].(float64))
 
 	b.ResetTimer()
 	b.ReportAllocs()
 
 	b.RunParallel(func(p *testing.PB) {
 		for p.Next() {
-			resp, err := rs.makeRequest("GET", "/v1/users/"+userID, nil)
+			resp, err := gs.makeRequest("GET", "/v1/users/"+userID, nil)
 			if err != nil {
 				b.Errorf("Request failed: %v", err)
 				continue
@@ -239,16 +194,16 @@ func BenchmarkREST_GetUser(b *testing.B) {
 	})
 }
 
-func BenchmarkREST_UpdateUser(b *testing.B) {
-	rs := setupRESTBenchmarkServer(b)
-	defer rs.Close()
+func BenchmarkGin_UpdateUser(b *testing.B) {
+	gs := setupGinBenchmarkServer(b)
+	defer gs.Close()
 
 	// Pre-create a user for testing
 	requestBody := map[string]interface{}{
 		"name":  "Test User",
 		"email": "test@example.com",
 	}
-	resp, err := rs.makeRequest("POST", "/v1/users", requestBody)
+	resp, err := gs.makeRequest("POST", "/v1/users", requestBody)
 	if err != nil {
 		b.Fatalf("Failed to create test user: %v", err)
 	}
@@ -258,10 +213,7 @@ func BenchmarkREST_UpdateUser(b *testing.B) {
 	if err := json.NewDecoder(resp.Body).Decode(&createResp); err != nil {
 		b.Fatalf("Failed to decode create response: %v", err)
 	}
-	userID, ok := createResp["id"].(string)
-	if !ok {
-		b.Fatalf("Response does not contain valid id: %v", createResp)
-	}
+	userID := fmt.Sprintf("%.0f", createResp["id"].(float64))
 
 	b.ResetTimer()
 	b.ReportAllocs()
@@ -269,12 +221,11 @@ func BenchmarkREST_UpdateUser(b *testing.B) {
 	b.RunParallel(func(p *testing.PB) {
 		for p.Next() {
 			requestBody := map[string]interface{}{
-				"id":    userID,
 				"name":  fmt.Sprintf("Updated_%d", time.Now().UnixNano()),
 				"email": fmt.Sprintf("updated_%d@example.com", time.Now().UnixNano()),
 			}
 
-			resp, err := rs.makeRequest("PUT", "/v1/users/"+userID, requestBody)
+			resp, err := gs.makeRequest("PUT", "/v1/users/"+userID, requestBody)
 			if err != nil {
 				b.Errorf("Request failed: %v", err)
 				continue
@@ -288,9 +239,9 @@ func BenchmarkREST_UpdateUser(b *testing.B) {
 	})
 }
 
-func BenchmarkREST_DeleteUser(b *testing.B) {
-	rs := setupRESTBenchmarkServer(b)
-	defer rs.Close()
+func BenchmarkGin_DeleteUser(b *testing.B) {
+	gs := setupGinBenchmarkServer(b)
+	defer gs.Close()
 
 	b.ResetTimer()
 	b.ReportAllocs()
@@ -303,9 +254,15 @@ func BenchmarkREST_DeleteUser(b *testing.B) {
 				"email": fmt.Sprintf("user_%d@example.com", time.Now().UnixNano()),
 			}
 
-			resp, err := rs.makeRequest("POST", "/v1/users", requestBody)
+			resp, err := gs.makeRequest("POST", "/v1/users", requestBody)
 			if err != nil {
 				b.Errorf("Create request failed: %v", err)
+				continue
+			}
+
+			if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+				resp.Body.Close()
+				b.Errorf("Create request failed with status: %d", resp.StatusCode)
 				continue
 			}
 
@@ -317,14 +274,15 @@ func BenchmarkREST_DeleteUser(b *testing.B) {
 			}
 			resp.Body.Close()
 
-			userID, ok := createResp["id"].(string)
+			idVal, ok := createResp["id"].(float64)
 			if !ok {
 				b.Errorf("Response does not contain valid id: %v", createResp)
 				continue
 			}
+			userID := fmt.Sprintf("%.0f", idVal)
 
 			// Delete the user
-			resp, err = rs.makeRequest("DELETE", "/v1/users/"+userID, nil)
+			resp, err = gs.makeRequest("DELETE", "/v1/users/"+userID, nil)
 			if err != nil {
 				b.Errorf("Delete request failed: %v", err)
 				continue
@@ -338,9 +296,9 @@ func BenchmarkREST_DeleteUser(b *testing.B) {
 	})
 }
 
-func BenchmarkREST_ListUsers(b *testing.B) {
-	rs := setupRESTBenchmarkServer(b)
-	defer rs.Close()
+func BenchmarkGin_ListUsers(b *testing.B) {
+	gs := setupGinBenchmarkServer(b)
+	defer gs.Close()
 
 	// Pre-create some users
 	for i := 0; i < 50; i++ {
@@ -348,7 +306,7 @@ func BenchmarkREST_ListUsers(b *testing.B) {
 			"name":  fmt.Sprintf("User_%d", i),
 			"email": fmt.Sprintf("user_%d@example.com", i),
 		}
-		resp, err := rs.makeRequest("POST", "/v1/users", requestBody)
+		resp, err := gs.makeRequest("POST", "/v1/users", requestBody)
 		if err != nil {
 			b.Fatalf("Failed to create test user %d: %v", i, err)
 		}
@@ -360,7 +318,7 @@ func BenchmarkREST_ListUsers(b *testing.B) {
 
 	b.RunParallel(func(p *testing.PB) {
 		for p.Next() {
-			resp, err := rs.makeRequest("GET", "/v1/users?page=1&limit=10", nil)
+			resp, err := gs.makeRequest("GET", "/v1/users?page=1&limit=10", nil)
 			if err != nil {
 				b.Errorf("Request failed: %v", err)
 				continue
@@ -374,10 +332,10 @@ func BenchmarkREST_ListUsers(b *testing.B) {
 	})
 }
 
-// Mixed workload benchmark for REST
-func BenchmarkREST_MixedWorkload(b *testing.B) {
-	rs := setupRESTBenchmarkServer(b)
-	defer rs.Close()
+// Mixed workload benchmark for Gin
+func BenchmarkGin_MixedWorkload(b *testing.B) {
+	gs := setupGinBenchmarkServer(b)
+	defer gs.Close()
 
 	// Pre-create some users for read operations
 	var userIDs []string
@@ -386,7 +344,7 @@ func BenchmarkREST_MixedWorkload(b *testing.B) {
 			"name":  fmt.Sprintf("User_%d", i),
 			"email": fmt.Sprintf("user_%d@example.com", i),
 		}
-		resp, err := rs.makeRequest("POST", "/v1/users", requestBody)
+		resp, err := gs.makeRequest("POST", "/v1/users", requestBody)
 		if err != nil {
 			b.Fatalf("Failed to create test user %d: %v", i, err)
 		}
@@ -398,11 +356,7 @@ func BenchmarkREST_MixedWorkload(b *testing.B) {
 		}
 		resp.Body.Close()
 
-		userID, ok := createResp["id"].(string)
-		if !ok {
-			b.Fatalf("Response does not contain valid id: %v", createResp)
-		}
-		userIDs = append(userIDs, userID)
+		userIDs = append(userIDs, fmt.Sprintf("%.0f", createResp["id"].(float64)))
 	}
 
 	b.ResetTimer()
@@ -417,7 +371,7 @@ func BenchmarkREST_MixedWorkload(b *testing.B) {
 					"name":  fmt.Sprintf("MixedUser_%d", time.Now().UnixNano()),
 					"email": fmt.Sprintf("mixed_%d@example.com", time.Now().UnixNano()),
 				}
-				resp, err := rs.makeRequest("POST", "/v1/users", requestBody)
+				resp, err := gs.makeRequest("POST", "/v1/users", requestBody)
 				if err == nil {
 					resp.Body.Close()
 				}
@@ -425,7 +379,7 @@ func BenchmarkREST_MixedWorkload(b *testing.B) {
 			case 1: // Get
 				if len(userIDs) > 0 {
 					userID := userIDs[i%len(userIDs)]
-					resp, err := rs.makeRequest("GET", "/v1/users/"+userID, nil)
+					resp, err := gs.makeRequest("GET", "/v1/users/"+userID, nil)
 					if err == nil {
 						resp.Body.Close()
 					}
@@ -435,18 +389,17 @@ func BenchmarkREST_MixedWorkload(b *testing.B) {
 				if len(userIDs) > 0 {
 					userID := userIDs[i%len(userIDs)]
 					requestBody := map[string]interface{}{
-						"id":    userID,
 						"name":  fmt.Sprintf("Updated_%d", time.Now().UnixNano()),
 						"email": fmt.Sprintf("updated_%d@example.com", time.Now().UnixNano()),
 					}
-					resp, err := rs.makeRequest("PUT", "/v1/users/"+userID, requestBody)
+					resp, err := gs.makeRequest("PUT", "/v1/users/"+userID, requestBody)
 					if err == nil {
 						resp.Body.Close()
 					}
 				}
 
 			case 3: // List
-				resp, err := rs.makeRequest("GET", "/v1/users?page=1&limit=10", nil)
+				resp, err := gs.makeRequest("GET", "/v1/users?page=1&limit=10", nil)
 				if err == nil {
 					resp.Body.Close()
 				}

@@ -121,16 +121,25 @@ type BenchmarkServer struct {
 	conn     *grpc.ClientConn
 }
 
+// Global counter to ensure unique ports
+var grpcPortCounter int64 = 50000
+
 func setupBenchmarkServer(b *testing.B) *BenchmarkServer {
 	logger := zaptest.NewLogger(b)
 	mockRepo := NewMockRepository()
 	userUsecase := user.New(mockRepo, nil, logger)
 
+	// Get unique port using atomic counter
+	port := atomic.AddInt64(&grpcPortCounter, 1)
+	if port > 60000 {
+		port = atomic.AddInt64(&grpcPortCounter, -10000) // Reset if too high
+	}
+
 	// Start gRPC server
 	server := grpc.NewServer()
 	pb.RegisterUserServiceServer(server, grpcadapter.NewUserServiceServer(userUsecase, logger))
 
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 	if err != nil {
 		b.Fatalf("Failed to listen: %v", err)
 	}
@@ -142,15 +151,23 @@ func setupBenchmarkServer(b *testing.B) *BenchmarkServer {
 	}()
 
 	// Wait for server to start
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(200 * time.Millisecond)
 
-	// Create client connection
-	conn, err := grpc.NewClient(
-		listener.Addr().String(),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
-	if err != nil {
-		b.Fatalf("Failed to connect: %v", err)
+	// Create client connection with retries
+	var conn *grpc.ClientConn
+	var connErr error
+	for i := 0; i < 5; i++ {
+		conn, connErr = grpc.NewClient(
+			fmt.Sprintf("127.0.0.1:%d", port),
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+		)
+		if connErr == nil {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if connErr != nil {
+		b.Fatalf("Failed to connect after retries: %v", connErr)
 	}
 
 	client := pb.NewUserServiceClient(conn)

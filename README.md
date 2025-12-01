@@ -1,17 +1,24 @@
 # gRPC User Service
 
-A production-ready microservice built with **Go**, **gRPC**, and **Clean Architecture** principles. This project demonstrates best practices for building scalable, maintainable, and testable backend services.
+A production-ready microservice built with **Go**, **Protocol Buffers**, **gRPC**, **Gin**, and **Clean Architecture** principles. This project demonstrates best practices for building scalable, maintainable, and testable backend services with **three API delivery mechanisms**: gRPC, gRPC-Gateway REST, and Gin REST API.
 
-## 🎯 Project Overview
+## 🎯 Project Goals
 
-This is a user management microservice that provides both **gRPC** and **REST** APIs through gRPC-Gateway. The service is designed following **Clean Architecture** and **SOLID principles**, ensuring clear separation of concerns and high testability.
+This project is designed to **showcase**:
+
+- **Protocol Buffers** for API contract definition and code generation
+- **Performance testing** across different API protocols (gRPC vs REST)
+- **Clean Architecture** with shared business logic across multiple transport layers
+- **Production-ready** features (caching, rate limiting, logging, graceful shutdown)
 
 ### Key Features
 
 - **Clean Architecture** - Clear separation between business logic and infrastructure with DI container
+- **Three API Protocols** - gRPC, gRPC-Gateway REST, and Gin REST API (all sharing same business logic)
 - **Config Validation** - Comprehensive validation at startup (40+ rules) for fail-fast error detection
 - **Graceful Shutdown** - Configurable timeout (1-300s) for different environments
 - **gRPC + gRPC-Gateway** - Native gRPC with automatic REST API generation
+- **Gin REST API** - High-performance HTTP API with middleware support
 - **Redis Caching** - Cache-aside pattern with automatic invalidation
 - **Rate Limiting** - gRPC interceptor-based rate limiting with Redis
 - **Dependency Inversion** - Business logic independent of frameworks and databases
@@ -19,7 +26,102 @@ This is a user management microservice that provides both **gRPC** and **REST** 
 - **Production-ready** - Structured logging, error handling, and panic recovery
 - **Testable** - Interface-based design for easy mocking and testing
 
-## 🏗️ Architecture
+## 📋 Protocol Buffers (Protocol Buffers)
+
+### API Contract Definition
+
+The service uses **Protocol Buffers** to define the API contract in `api/proto/user.proto`:
+
+```protobuf
+syntax = "proto3";
+package user;
+
+option go_package = "grpc-user-service/api/gen/go/user";
+
+service UserService {
+  rpc CreateUser(CreateUserRequest) returns (CreateUserResponse);
+  rpc GetUser(GetUserRequest) returns (GetUserResponse);
+  rpc UpdateUser(UpdateUserRequest) returns (UpdateUserResponse);
+  rpc DeleteUser(DeleteUserRequest) returns (DeleteUserResponse);
+  rpc ListUsers(ListUsersRequest) returns (ListUsersResponse);
+}
+
+message User {
+  int64 id = 1;
+  string name = 2;
+  string email = 3;
+}
+```
+
+### Code Generation
+
+**Generated Go code** from protobuf:
+
+```bash
+# Generate all protobuf code
+make proto-gen
+
+# Generated files:
+api/gen/go/user/
+├── user.pb.go          # Go structs for messages
+├── user_grpc.pb.go     # gRPC service interfaces
+└── user.pb.gw.go       # gRPC-Gateway HTTP handlers
+```
+
+### Benefits of Protocol Buffers
+
+- **Language-agnostic** - Same contract works for Go, Java, Python, etc.
+- **Type-safe** - Compile-time type checking for all API messages
+- **Code generation** - Automatic generation of client/server code
+- **Versioning** - Built-in support for API evolution
+- **Performance** - Binary serialization more efficient than JSON
+
+## ⚡ Performance Testing
+
+### Benchmark Overview
+
+This project includes **comprehensive performance testing** comparing **three API protocols**:
+
+- **gRPC** - Binary protocol with HTTP/2
+- **Gin REST API** - HTTP/1.1 with JSON
+- **gRPC-Gateway REST** - HTTP/1.1 JSON via gRPC translation
+
+### Test Results (Mac mini M4)
+
+**Performance Leaderboard (CreateUser operation):**
+
+| Protocol         | Latency (ns/op) | Throughput (ops/sec) | Memory (B/op) | Efficiency |
+| ---------------- | --------------- | -------------------- | ------------- | ---------- |
+| **gRPC**         | 101,635         | 9,838                | 13,035        | 🥇 Best    |
+| **Gin REST**     | 401,614         | 2,488                | 43,108        | 🥈 Good    |
+| **REST Gateway** | 442,655         | 2,259                | 56,006        | 🥉 OK      |
+
+**Key Insights:**
+
+- gRPC is **4x faster** than REST APIs
+- gRPC uses **3x less memory** than REST APIs
+- All protocols share **identical business logic** (Clean Architecture)
+- Performance difference purely from transport layer
+
+### Run Performance Tests
+
+```bash
+# Quick benchmark comparison
+make benchmark
+
+# Individual protocol tests
+make benchmark-grpc     # gRPC only
+make benchmark-gin      # Gin REST only
+make benchmark-rest     # gRPC-Gateway only
+
+# Advanced profiling
+make benchmark-cpu      # CPU profiling
+make benchmark-mem      # Memory profiling
+```
+
+---
+
+## 🏗️ Clean Architecture
 
 This project follows **Clean Architecture** principles with clear dependency rules:
 
@@ -30,6 +132,7 @@ This project follows **Clean Architecture** principles with clear dependency rul
 │  │              adapter/ (Infrastructure)                 │ │
 │  │  • grpc/      - gRPC server implementation            │ │
 │  │  • http/      - HTTP handlers & middleware            │ │
+│  │  • gin/       - Gin REST API handlers & middleware    │ │
 │  │  • db/        - Database implementations (Postgres)   │ │
 │  │  • cache/     - Cache implementations (Redis)         │ │
 │  └────────────────────────────────────────────────────────┘ │
@@ -65,7 +168,8 @@ adapter → usecase → domain
   ↓         ↓         ↓
 gRPC    Business   Pure
 HTTP    Logic      Models
-DB      Rules
+Gin     Rules
+DB
 Cache
 ```
 
@@ -114,6 +218,10 @@ grpc-user-service/
 │   │   ├── grpc/                 # gRPC transport layer
 │   │   │   ├── user_service.go   # gRPC → Usecase adapter
 │   │   │   └── middleware/       # gRPC middleware (rate limiting)
+│   │   ├── gin/                  # Gin REST API transport layer
+│   │   │   ├── handler/          # Gin HTTP handlers
+│   │   │   ├── middleware/       # Gin middleware (logger, recovery, rate limiting)
+│   │   │   └── router/           # Gin router configuration
 │   │   ├── db/                   # Database implementations
 │   │   │   └── postgres/         # PostgreSQL repository
 │   │   └── cache/                # Cache implementations
@@ -136,8 +244,17 @@ grpc-user-service/
 │   ├── docker-compose.yml
 │   └── migrations/               # Database migrations
 │
+├── test/                         # Test files
+│   ├── benchmark/                # Performance benchmarks
+│   └── integration/              # Integration tests
+│
+├── pkg/                          # Shared packages
+│   ├── errors/                   # Error handling
+│   ├── logger/                   # Structured logging
+│   ├── redis/                    # Redis client wrapper
+│   └── security/                 # Validation utilities
+│
 ├── scripts/                      # Build & utility scripts
-├── tests/                        # Integration & E2E tests
 ├── buf.yaml
 ├── buf.gen.yaml
 ├── .golangci.yml
@@ -148,14 +265,43 @@ grpc-user-service/
 
 ### Example: GetUser Request
 
+**Three API Entry Points, Same Business Logic:**
+
+#### gRPC Path:
+
 ```
-1. Client Request (gRPC or REST)
+1. gRPC Client Request
    ↓
 2. adapter/grpc/UserServiceServer
    • Receives: pb.GetUserRequest{Id: 123}
    • Extracts: id := req.Id
    • Calls: usecase.GetUser(ctx, id)
+```
+
+#### gRPC-Gateway REST Path:
+
+```
+1. HTTP Client: GET /v1/users/123
    ↓
+2. gRPC-Gateway converts HTTP → gRPC
+   ↓
+3. adapter/grpc/UserServiceServer (same as above)
+```
+
+#### Gin REST API Path:
+
+```
+1. HTTP Client: GET /v1/users/123
+   ↓
+2. adapter/gin/handler/UserHandler
+   • Receives: gin.Context with param "id"
+   • Extracts: id := c.Param("id")
+   • Calls: usecase.GetUser(ctx, id)
+```
+
+**Shared Business Logic Flow:**
+
+```
 3. usecase/user/UserUsecase
    • Receives: id int64
    • Validates: id > 0
@@ -168,9 +314,10 @@ grpc-user-service/
 5. usecase/user/UserUsecase
    • Returns: *domain.User
    ↓
-6. adapter/grpc/UserServiceServer
-   • Converts: domain.User → pb.GetUserResponse
-   • Returns: pb.GetUserResponse
+6. Response (varies by protocol):
+   • gRPC: pb.GetUserResponse
+   • REST: JSON response
+   • Gin: JSON response
    ↓
 7. Client receives response
 ```
@@ -258,6 +405,43 @@ func (s *UserServiceServer) GetUser(ctx context.Context, req *pb.GetUserRequest)
         Email: user.Email,
     }, nil
 }
+```
+
+#### adapter/gin - Gin REST API Transport Layer
+
+```go
+// Converts HTTP requests ↔ domain models
+func (h *UserHandler) GetUser(c *gin.Context) {
+    // Extract and validate ID from URL parameter
+    id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+    if err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+        return
+    }
+
+    // Call business logic
+    user, err := h.uc.GetUser(c.Request.Context(), id)
+    if err != nil {
+        c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+        return
+    }
+
+    // Convert domain model to JSON response
+    c.JSON(http.StatusOK, gin.H{
+        "id":    user.ID,
+        "name":  user.Name,
+        "email": user.Email,
+    })
+}
+```
+
+**Gin Middleware Stack:**
+
+```go
+// Applied in router/router.go
+router.Use(middleware.Recovery(log))      // Panic recovery
+router.Use(middleware.Logger(log))         // Request logging
+router.Use(middleware.RateLimiter(...))    // Rate limiting
 ```
 
 #### adapter/db - Database Implementations
@@ -447,7 +631,33 @@ type Container struct {
 
 ---
 
-## 🚀 Getting Started
+## 🚀 Quick Start
+
+**For reviewers - Try these commands to see the project in action:**
+
+```bash
+# 1. Start all services (PostgreSQL + Redis + API)
+cd deployments
+docker-compose up -d
+
+# 2. Test all three API protocols
+# gRPC
+gprcurl -plaintext -d '{"id": 1}' localhost:50051 user.UserService/GetUser
+
+# REST (gRPC-Gateway)
+curl http://localhost:8080/v1/users/1
+
+# Gin REST API
+curl http://localhost:9090/v1/users/1
+
+# 3. Run performance comparison
+make benchmark
+
+# 4. View logs
+docker-compose logs -f grpc-user-service
+```
+
+---
 
 ### Prerequisites
 
@@ -510,11 +720,39 @@ docker-compose down -v
 **Services available:**
 
 - gRPC: `localhost:50051`
-- REST API: `http://localhost:8080`
+- REST API (gRPC-Gateway): `http://localhost:8080`
+- Gin REST API: `http://localhost:9090`
 - PostgreSQL: `localhost:5432`
 - Redis: `localhost:6379`
 
 ## 📡 API Usage
+
+### Quick Protocol Test
+
+**Test Protocol Buffers code generation:**
+
+```bash
+# View generated protobuf code
+ls -la api/gen/go/user/
+cat api/gen/go/user/user.pb.go
+
+# Test protobuf message creation
+go run -c 'package main
+
+import (
+    "fmt"
+    "grpc-user-service/api/gen/go/user"
+)
+
+func main() {
+    u := &user.User{
+        Id:    1,
+        Name:  "Test User",
+        Email: "test@example.com",
+    }
+    fmt.Printf("Protobuf message: %+v\n", u)
+}'
+```
 
 ### gRPC
 
@@ -536,6 +774,29 @@ curl http://localhost:8080/v1/users/1
 curl -X POST http://localhost:8080/v1/users \
   -H "Content-Type: application/json" \
   -d '{"name": "John Doe", "email": "john@example.com"}'
+```
+
+### Gin REST API
+
+```bash
+# Get user
+curl http://localhost:9090/v1/users/1
+
+# Create user
+curl -X POST http://localhost:9090/v1/users \
+  -H "Content-Type: application/json" \
+  -d '{"name": "John Doe", "email": "john@example.com"}'
+
+# List users (with pagination)
+curl "http://localhost:9090/v1/users?page=1&limit=10"
+
+# Update user
+curl -X PUT http://localhost:9090/v1/users/1 \
+  -H "Content-Type: application/json" \
+  -d '{"name": "John Updated", "email": "john.updated@example.com"}'
+
+# Delete user
+curl -X DELETE http://localhost:9090/v1/users/1
 ```
 
 ## 📝 Logging
@@ -688,9 +949,11 @@ go test -coverprofile=coverage.out ./...
 go tool cover -html=coverage.out
 ```
 
-## 📊 Performance Benchmarks
+## 📊 Detailed Benchmark Results
 
-Comprehensive performance testing framework with detailed metrics collection.
+**Complete performance testing framework with detailed metrics collection.**
+
+_For quick overview, see the [Performance Testing](#-performance-testing) section above._
 
 ### Test Hardware
 
@@ -699,39 +962,60 @@ Comprehensive performance testing framework with detailed metrics collection.
 - **Memory**: 16 GB
 - **OS**: macOS
 
-### Benchmark Results
+### Detailed Results
 
 Results using in-memory mock repository (Mac mini M4):
 
 #### gRPC Performance
 
-| Operation     | P50 Latency | P99 Latency | Throughput |
-| ------------- | ----------- | ----------- | ---------- |
-| CreateUser    | 120µs       | 450µs       | ~8,300/s   |
-| GetUser       | 60µs        | 200µs       | ~16,600/s  |
-| UpdateUser    | 140µs       | 480µs       | ~7,100/s   |
-| DeleteUser    | 95µs        | 350µs       | ~10,500/s  |
-| ListUsers     | 220µs       | 750µs       | ~4,500/s   |
-| MixedWorkload | 130µs       | 520µs       | ~7,700/s   |
+| Operation     | Iterations | ns/op   | B/op    | allocs/op |
+| ------------- | ---------- | ------- | ------- | --------- |
+| CreateUser    | 20,294     | 101,635 | 13,035  | 211       |
+| GetUser       | 38,239     | 45,293  | 7,150   | 116       |
+| UpdateUser    | 25,776     | 69,595  | 10,107  | 162       |
+| DeleteUser    | 31,639     | 50,849  | 7,367   | 126       |
+| ListUsers     | 14,755     | 137,324 | 29,804  | 334       |
+| MixedWorkload | 23,960     | 66,016  | 140,398 | 222       |
 
-#### REST Performance
+#### Gin Performance
 
-| Operation     | P50 Latency | P99 Latency | Throughput |
-| ------------- | ----------- | ----------- | ---------- |
-| CreateUser    | 320µs       | 1.1ms       | ~3,100/s   |
-| GetUser       | 270µs       | 950µs       | ~3,700/s   |
-| UpdateUser    | 340µs       | 1.2ms       | ~2,900/s   |
-| DeleteUser    | 300µs       | 1.0ms       | ~3,300/s   |
-| ListUsers     | 420µs       | 1.5ms       | ~2,400/s   |
-| MixedWorkload | 340µs       | 1.2ms       | ~2,900/s   |
+| Operation     | Iterations | ns/op   | B/op    | allocs/op |
+| ------------- | ---------- | ------- | ------- | --------- |
+| CreateUser    | 3,004      | 401,614 | 43,108  | 289       |
+| GetUser       | 4,894      | 269,096 | 27,503  | 194       |
+| UpdateUser    | 2,888      | 417,279 | 53,288  | 292       |
+| DeleteUser    | 3,438      | 347,963 | 29,699  | 204       |
+| ListUsers     | 2,289      | 552,127 | 110,250 | 505       |
+| MixedWorkload | 1,509      | 835,735 | 77,921  | 286       |
 
-**Key Findings:**
+#### REST (gRPC-Gateway) Performance
 
-- ⚡ gRPC is **2.5-3x faster** than REST in latency
-- 🚀 gRPC handles **2.5-3.5x more requests** per second
-- ✅ Both protocols maintain 100% success rate under load
+| Operation     | Iterations | ns/op   | B/op    | allocs/op |
+| ------------- | ---------- | ------- | ------- | --------- |
+| CreateUser    | 2,533      | 442,655 | 56,006  | 344       |
+| GetUser       | 4,212      | 286,571 | 36,940  | 241       |
+| UpdateUser    | 2,472      | 477,212 | 66,187  | 347       |
+| DeleteUser    | 3,343      | 357,497 | 39,137  | 251       |
+| ListUsers     | 1,963      | 638,634 | 127,117 | 559       |
+| MixedWorkload | 1,315      | 979,219 | 93,698  | 535       |
 
-> **Note**: These are in-memory benchmarks. Real database operations will have higher latencies.
+#### Performance Comparison
+
+- **Latency**: gRPC is **3-4x faster** than Gin and REST
+- **Throughput**: gRPC handles **4-5x more requests** than Gin and REST
+- **Memory**: gRPC uses significantly less memory and allocations
+- **Consistency**: All protocols maintain 100% success rate under load
+
+#### Metrics Explanation
+
+| Metric         | Description                                                                |
+| -------------- | -------------------------------------------------------------------------- |
+| **Iterations** | Total number of times the operation was executed during the benchmark      |
+| **ns/op**      | Nanoseconds per operation (lower is better). Represents latency.           |
+| **B/op**       | Bytes allocated per operation (lower is better). Memory usage.             |
+| **allocs/op**  | Number of memory allocations per operation (lower is better). GC pressure. |
+
+> **Note**: These results use in-memory mock repository. Real database operations will have higher latencies depending on database performance and network conditions.
 
 ### Running Benchmarks
 
@@ -742,20 +1026,21 @@ make benchmark
 # Run gRPC benchmarks only
 make benchmark-grpc
 
-# Run REST benchmarks only
+# Run Gin benchmarks only
+make benchmark-gin
+
+# Run REST (gRPC-Gateway) benchmarks only
 make benchmark-rest
 
-# Run with CPU profiling
+# Run benchmarks with CPU profiling
 make benchmark-cpu
 
-# Run with memory profiling
+# Run benchmarks with memory profiling
 make benchmark-mem
 
-# Custom configuration
-cd test/benchmark && go run main.go -duration=30s -concurrency=10
+# Run benchmarks with custom configuration
+make benchmark-config
 ```
-
-📖 **For detailed benchmark documentation**, see [docs/performance-benchmarks.md](docs/performance-benchmarks.md)
 
 ## 🛠️ Development
 
@@ -865,6 +1150,8 @@ redis-cli KEYS "ratelimit:*"
 - [x] Config validation (40+ rules, fail-fast)
 - [x] Graceful shutdown with configurable timeout
 - [x] gRPC + gRPC-Gateway
+- [x] **Gin REST API** with middleware stack
+- [x] **Three API protocols** sharing same business logic
 - [x] Structured logging (Zap with production features)
 - [x] Redis caching layer
 - [x] Rate limiting (gRPC interceptor)
@@ -873,11 +1160,13 @@ redis-cli KEYS "ratelimit:*"
 - [x] Lint compliance (0 issues)
 - [x] Panic recovery in app and server goroutines
 - [x] Context-aware shutdown with timeout
+- [x] Performance benchmarks for all three protocols
+- [x] Health check endpoints
 
 ### 🚧 In Progress
 
-- [ ] Health checks (`/health/live`, `/health/ready`)
 - [ ] Metrics endpoint (Prometheus)
+- [ ] API documentation (Swagger/OpenAPI)
 
 ### 📋 Planned
 
@@ -903,8 +1192,9 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - [Clean Architecture](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html) by Robert C. Martin
 - [gRPC-Go](https://github.com/grpc/grpc-go)
 - [gRPC-Gateway](https://github.com/grpc-ecosystem/grpc-gateway)
+- [Gin Web Framework](https://github.com/gin-gonic/gin)
 - [Protocol Buffers](https://protobuf.dev/)
 
 ---
 
-**Built with ❤️ using Go and Clean Architecture principles**
+**Built with ❤️ using Go, gRPC, Gin, and Clean Architecture principles**

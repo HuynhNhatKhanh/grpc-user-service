@@ -42,7 +42,7 @@ func New() (*App, error) {
 	}
 
 	// Create server instance
-	srv := server.New(cfg, l, container.UserUC, container.RateLimiter)
+	srv := server.New(cfg, l, container.UserUC, container.RateLimiter, container.GinHandler, container.RedisClient)
 
 	return &App{
 		Config:    cfg,
@@ -116,6 +116,15 @@ func (a *App) shutdown() error {
 		if err := a.Server.HTTP.Shutdown(shutdownCtx); err != nil {
 			a.Logger.Error("failed to shutdown HTTP server", zap.Error(err))
 			errs = append(errs, fmt.Errorf("HTTP shutdown: %w", err))
+		}
+	}
+
+	// Shutdown Gin server
+	if a.Server.Gin != nil {
+		a.Logger.Info("shutting down Gin server...")
+		if err := a.Server.Gin.Shutdown(shutdownCtx); err != nil {
+			a.Logger.Error("failed to shutdown Gin server", zap.Error(err))
+			errs = append(errs, fmt.Errorf("Gin shutdown: %w", err))
 		}
 	}
 

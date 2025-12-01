@@ -5,6 +5,7 @@ import (
 	"grpc-user-service/cmd/api/infrastructure"
 	"grpc-user-service/internal/adapter/cache"
 	"grpc-user-service/internal/adapter/db/postgres"
+	ginhandler "grpc-user-service/internal/adapter/gin/handler"
 	"grpc-user-service/internal/adapter/grpc/middleware"
 	"grpc-user-service/internal/config"
 	"grpc-user-service/internal/usecase/user"
@@ -23,6 +24,7 @@ type Container struct {
 	RedisClient *redisclient.Client
 	UserUC      *user.Usecase
 	RateLimiter *middleware.RateLimiter
+	GinHandler  *ginhandler.UserHandler
 }
 
 // NewContainer creates and initializes all application dependencies
@@ -68,6 +70,9 @@ func NewContainer(cfg *config.Config, l *zap.Logger) (*Container, error) {
 		l,
 	)
 
+	// Initialize Gin handler
+	ginHandler := ginhandler.NewUserHandler(userUC, l)
+
 	return &Container{
 		Config:      cfg,
 		Logger:      l,
@@ -75,6 +80,7 @@ func NewContainer(cfg *config.Config, l *zap.Logger) (*Container, error) {
 		RedisClient: rdb,
 		UserUC:      userUC,
 		RateLimiter: rateLimiter,
+		GinHandler:  ginHandler,
 	}, nil
 }
 

@@ -6,21 +6,21 @@ This document outlines the performance benchmarking framework for the gRPC User 
 
 ### Expected Performance Metrics
 
-| Metric        | gRPC       | REST (gRPC-Gateway) |
-| ------------- | ---------- | ------------------- |
-| Latency (p50) | ~1-2ms     | ~5-7ms              |
-| Latency (p99) | ~5ms       | ~15ms               |
-| Throughput    | ~50k req/s | ~20k req/s          |
+| Metric        | gRPC       | Gin REST  | REST (Gateway) |
+| ------------- | ---------- | --------- | -------------- |
+| Latency (p50) | ~100µs     | ~400µs    | ~440µs         |
+| Latency (p99) | ~450µs     | ~1.1ms    | ~1.2ms         |
+| Throughput    | ~20k req/s | ~3k req/s | ~2.5k req/s    |
 
 ### Detailed Latency Targets
 
 | Percentile | gRPC Target | REST Target |
 | ---------- | ----------- | ----------- |
-| P50        | 1-2ms       | 5-7ms       |
-| P90        | 3ms         | 10ms        |
-| P95        | 4ms         | 12ms        |
-| P99        | 5ms         | 15ms        |
-| P99.9      | 8ms         | 20ms        |
+| P50        | < 200µs     | < 500µs     |
+| P90        | < 300µs     | < 800µs     |
+| P95        | < 400µs     | < 1ms       |
+| P99        | < 500µs     | < 1.5ms     |
+| P99.9      | < 1ms       | < 2ms       |
 
 ## 🧪 Benchmark Suite
 
@@ -133,6 +133,15 @@ func main() {
 
 - **Success Rate**: Percentage of successful requests
 - **Error Count**: Number of failed requests
+
+#### Go Benchmark Metrics
+
+| Metric         | Description                                                                |
+| -------------- | -------------------------------------------------------------------------- |
+| **Iterations** | Total number of times the operation was executed during the benchmark      |
+| **ns/op**      | Nanoseconds per operation (lower is better). Represents latency.           |
+| **B/op**       | Bytes allocated per operation (lower is better). Memory usage.             |
+| **allocs/op**  | Number of memory allocations per operation (lower is better). GC pressure. |
 
 ### Performance Analysis
 
@@ -247,35 +256,12 @@ GOGC=100
 
 ### Sample Benchmark Results
 
-Results from Mac mini M4 (10-core, 16GB RAM):
-
-#### gRPC Performance
-
-| Operation     | P50 Latency | P99 Latency | Throughput | Success Rate |
-| ------------- | ----------- | ----------- | ---------- | ------------ |
-| CreateUser    | 120µs       | 450µs       | ~8,300/s   | 100%         |
-| GetUser       | 60µs        | 200µs       | ~16,600/s  | 100%         |
-| UpdateUser    | 140µs       | 480µs       | ~7,100/s   | 100%         |
-| DeleteUser    | 95µs        | 350µs       | ~10,500/s  | 100%         |
-| ListUsers     | 220µs       | 750µs       | ~4,500/s   | 100%         |
-| MixedWorkload | 130µs       | 520µs       | ~7,700/s   | 100%         |
-
-#### REST Performance
-
-| Operation     | P50 Latency | P99 Latency | Throughput | Success Rate |
-| ------------- | ----------- | ----------- | ---------- | ------------ |
-| CreateUser    | 320µs       | 1.1ms       | ~3,100/s   | 100%         |
-| GetUser       | 270µs       | 950µs       | ~3,700/s   | 100%         |
-| UpdateUser    | 340µs       | 1.2ms       | ~2,900/s   | 100%         |
-| DeleteUser    | 300µs       | 1.0ms       | ~3,300/s   | 100%         |
-| ListUsers     | 420µs       | 1.5ms       | ~2,400/s   | 100%         |
-| MixedWorkload | 340µs       | 1.2ms       | ~2,900/s   | 100%         |
-
 #### Performance Comparison
 
-- **Latency**: gRPC is **2.5-3x faster** than REST
-- **Throughput**: gRPC handles **2.5-3.5x more requests** than REST
-- **Consistency**: Both protocols maintain 100% success rate under load
+- **Latency**: gRPC is **3-4x faster** than Gin and REST
+- **Throughput**: gRPC handles **4-5x more requests** than Gin and REST
+- **Memory**: gRPC uses significantly less memory and allocations
+- **Consistency**: All protocols maintain 100% success rate under load
 
 > **Note**: These results use in-memory mock repository. Real database operations will have higher latencies depending on database performance and network conditions.
 
@@ -461,14 +447,3 @@ Monitor long-term trends:
 - Weekly performance reports
 - Monthly regression analysis
 - Quarterly target adjustments
-
----
-
-## 📞 Support
-
-For questions about performance benchmarking:
-
-1. Check this documentation
-2. Review test implementation
-3. Consult Go performance best practices
-4. Contact the performance team

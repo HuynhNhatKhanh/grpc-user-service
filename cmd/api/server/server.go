@@ -3,9 +3,11 @@ package server
 import (
 	"context"
 	"fmt"
+	ginhandler "grpc-user-service/internal/adapter/gin/handler"
 	"grpc-user-service/internal/adapter/grpc/middleware"
 	"grpc-user-service/internal/config"
 	"grpc-user-service/internal/usecase/user"
+	redisclient "grpc-user-service/pkg/redis"
 	"net"
 	"net/http"
 
@@ -15,24 +17,38 @@ import (
 
 // Server struct holds all server dependencies
 type Server struct {
-	Config *config.Config
-	Logger *zap.Logger
-	UserUC *user.Usecase
-	GRPC   *grpc.Server
-	HTTP   *http.Server
+	Config      *config.Config
+	Logger      *zap.Logger
+	UserUC      *user.Usecase
+	GRPC        *grpc.Server
+	HTTP        *http.Server
+	Gin         *http.Server
+	GinHandler  *ginhandler.UserHandler
+	RateLimiter *middleware.RateLimiter
+	RedisClient *redisclient.Client
 }
 
 // New creates a new server instance
-func New(cfg *config.Config, l *zap.Logger, userUC *user.Usecase, rateLimiter *middleware.RateLimiter) *Server {
+func New(
+	cfg *config.Config,
+	l *zap.Logger,
+	userUC *user.Usecase,
+	rateLimiter *middleware.RateLimiter,
+	ginHandler *ginhandler.UserHandler,
+	redisClient *redisclient.Client,
+) *Server {
 	return &Server{
-		Config: cfg,
-		Logger: l,
-		UserUC: userUC,
-		GRPC:   SetupGRPC(userUC, l, rateLimiter),
+		Config:      cfg,
+		Logger:      l,
+		UserUC:      userUC,
+		GRPC:        SetupGRPC(userUC, l, rateLimiter),
+		GinHandler:  ginHandler,
+		RateLimiter: rateLimiter,
+		RedisClient: redisClient,
 	}
 }
 
-// Start starts both gRPC and HTTP servers
+// Start starts all servers (gRPC, HTTP gateway, and Gin)
 func (s *Server) Start() error {
 	// Start gRPC server
 	if err := s.startGRPC(); err != nil {
@@ -42,6 +58,11 @@ func (s *Server) Start() error {
 	// Start HTTP gateway
 	if err := s.startHTTPGateway(); err != nil {
 		return fmt.Errorf("failed to start HTTP gateway: %w", err)
+	}
+
+	// Start Gin server
+	if err := s.startGinServer(); err != nil {
+		return fmt.Errorf("failed to start Gin server: %w", err)
 	}
 
 	return nil
@@ -80,4 +101,28 @@ func (s *Server) startHTTPGateway() error {
 	s.Logger.Info("REST gateway running", zap.String("address", s.httpAddress()))
 
 	return s.HTTP.ListenAndServe()
+}
+
+// ginAddress returns the Gin server address
+func (s *Server) ginAddress() string {
+	return ":" + s.Config.App.GinPort
+}
+
+// startGinServer starts the Gin REST API server
+func (s *Server) startGinServer() error {
+	ginServer, err := SetupGinServer(
+		s.GinHandler,
+		s.RateLimiter,
+		s.RedisClient,
+		s.ginAddress(),
+		s.Logger,
+	)
+	if err != nil {
+		return err
+	}
+
+	s.Gin = ginServer
+	s.Logger.Info("Gin REST API running", zap.String("address", s.ginAddress()))
+
+	return s.Gin.ListenAndServe()
 }
