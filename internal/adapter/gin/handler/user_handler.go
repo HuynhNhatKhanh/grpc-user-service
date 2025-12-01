@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"context"
 	"net/http"
 	"strconv"
 
@@ -12,23 +11,14 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// UserUsecase defines the interface for user business logic
-type UserUsecase interface {
-	CreateUser(ctx context.Context, req user.CreateUserRequest) (*user.CreateUserResponse, error)
-	GetUser(ctx context.Context, req user.GetUserRequest) (*user.GetUserResponse, error)
-	UpdateUser(ctx context.Context, req user.UpdateUserRequest) (*user.UpdateUserResponse, error)
-	DeleteUser(ctx context.Context, req user.DeleteUserRequest) (*user.DeleteUserResponse, error)
-	ListUsers(ctx context.Context, req user.ListUsersRequest) (*user.ListUsersResponse, error)
-}
-
 // UserHandler handles HTTP requests for user operations
 type UserHandler struct {
-	uc  UserUsecase
+	uc  user.UserUsecase
 	log *zap.Logger
 }
 
 // NewUserHandler creates a new UserHandler instance
-func NewUserHandler(uc UserUsecase, log *zap.Logger) *UserHandler {
+func NewUserHandler(uc user.UserUsecase, log *zap.Logger) *UserHandler {
 	return &UserHandler{
 		uc:  uc,
 		log: log,

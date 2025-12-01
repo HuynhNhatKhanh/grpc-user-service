@@ -13,13 +13,13 @@ import (
 
 // UserServiceServer implements the gRPC user service interface.
 type UserServiceServer struct {
-	pb.UnimplementedUserServiceServer               // Embedded for forward compatibility
-	uc                                *user.Usecase // User business logic handler
-	log                               *zap.Logger   // Structured logger
+	pb.UnimplementedUserServiceServer                  // Embedded for forward compatibility
+	uc                                user.UserUsecase // User business logic handler
+	log                               *zap.Logger      // Structured logger
 }
 
 // NewUserServiceServer creates a new instance of UserServiceServer.
-func NewUserServiceServer(uc *user.Usecase, log *zap.Logger) *UserServiceServer {
+func NewUserServiceServer(uc user.UserUsecase, log *zap.Logger) *UserServiceServer {
 	return &UserServiceServer{uc: uc, log: log}
 }
 

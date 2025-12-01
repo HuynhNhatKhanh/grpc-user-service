@@ -22,7 +22,7 @@ type Container struct {
 	Logger      *zap.Logger
 	DB          *gorm.DB
 	RedisClient *redisclient.Client
-	UserUC      *user.Usecase
+	UserUC      user.UserUsecase
 	RateLimiter *middleware.RateLimiter
 	GinHandler  *ginhandler.UserHandler
 }

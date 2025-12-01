@@ -73,7 +73,7 @@ type UserAPIIntegrationTestSuite struct {
 	httpClient  *http.Client
 	baseURL     string
 	mockRepo    *MockRepository
-	userUsecase *user.Usecase
+	userUsecase user.UserUsecase
 }
 
 // SetupSuite starts the actual gRPC server and HTTP gateway for testing
@@ -298,10 +298,10 @@ func (suite *UserAPIIntegrationTestSuite) TestListUsersAPI() {
 	// Verify pagination info
 	pagination, ok := response["pagination"].(map[string]interface{})
 	suite.Require().True(ok)
-	assert.Equal(suite.T(), float64(50), pagination["total"])
-	assert.Equal(suite.T(), float64(1), pagination["page"])
-	assert.Equal(suite.T(), float64(10), pagination["limit"])
-	assert.Equal(suite.T(), float64(5), pagination["totalPages"]) // (50 + 10 - 1) / 10 = 5
+	assert.Equal(suite.T(), "50", pagination["total"])
+	assert.Equal(suite.T(), "1", pagination["page"])
+	assert.Equal(suite.T(), "10", pagination["limit"])
+	assert.Equal(suite.T(), "5", pagination["totalPages"]) // (50 + 10 - 1) / 10 = 5
 
 	suite.mockRepo.AssertExpectations(suite.T())
 }

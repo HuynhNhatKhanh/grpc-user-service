@@ -19,7 +19,7 @@ import (
 type Server struct {
 	Config      *config.Config
 	Logger      *zap.Logger
-	UserUC      *user.Usecase
+	UserUC      user.UserUsecase
 	GRPC        *grpc.Server
 	HTTP        *http.Server
 	Gin         *http.Server
@@ -32,7 +32,7 @@ type Server struct {
 func New(
 	cfg *config.Config,
 	l *zap.Logger,
-	userUC *user.Usecase,
+	userUC user.UserUsecase,
 	rateLimiter *middleware.RateLimiter,
 	ginHandler *ginhandler.UserHandler,
 	redisClient *redisclient.Client,

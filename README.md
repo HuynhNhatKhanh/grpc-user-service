@@ -211,7 +211,8 @@ grpc-user-service/
 │   │
 │   ├── usecase/                  # 🟡 Application Business Rules
 │   │   └── user/
-│   │       ├── usecase.go        # Business logic & interfaces
+│   │       ├── interface.go      # UserUsecase interface definition
+│   │       ├── usecase.go        # Business logic & repository interfaces
 │   │       └── dto.go            # Data transfer objects
 │   │
 │   ├── adapter/                  # 🔴 Interface Adapters
@@ -302,7 +303,7 @@ grpc-user-service/
 **Shared Business Logic Flow:**
 
 ```
-3. usecase/user/UserUsecase
+3. usecase/user/UserUsecase (interface)
    • Receives: id int64
    • Validates: id > 0
    • Calls: repo.GetByID(ctx, id)
@@ -311,7 +312,7 @@ grpc-user-service/
    • Queries database
    • Returns: *domain.User
    ↓
-5. usecase/user/UserUsecase
+5. usecase/user/UserUsecase implementation
    • Returns: *domain.User
    ↓
 6. Response (varies by protocol):
@@ -355,21 +356,39 @@ import "github.com/lib/pq"       // NO!
 **Business logic independent of delivery mechanism**
 
 ```go
-// Defines interfaces (Dependency Inversion)
-type UserRepository interface {
+// UserUsecase interface defines business operations
+type UserUsecase interface {
+    CreateUser(ctx context.Context, in CreateUserRequest) (*CreateUserResponse, error)
+    GetUser(ctx context.Context, in GetUserRequest) (*GetUserResponse, error)
+    UpdateUser(ctx context.Context, in UpdateUserRequest) (*UpdateUserResponse, error)
+    DeleteUser(ctx context.Context, in DeleteUserRequest) (*DeleteUserResponse, error)
+    ListUsers(ctx context.Context, in ListUsersRequest) (*ListUsersResponse, error)
+}
+
+// Repository interface for data access (Dependency Inversion)
+type Repository interface {
     GetByID(ctx context.Context, id int64) (*user.User, error)
     Create(ctx context.Context, u *user.User) (int64, error)
 }
 
-// Business logic with validation
-func (uc *UserUsecase) GetUser(ctx context.Context, id int64) (*user.User, error) {
+// Business logic implementation
+func (uc *Usecase) GetUser(ctx context.Context, req GetUserRequest) (*GetUserResponse, error) {
     // Validation
-    if id <= 0 {
+    if req.ID <= 0 {
         return nil, errors.New("invalid user id")
     }
 
     // Business logic
-    return uc.repo.GetByID(ctx, id)
+    u, err := uc.repo.GetByID(ctx, req.ID)
+    if err != nil {
+        return nil, err
+    }
+
+    return &GetUserResponse{
+        ID:    u.ID,
+        Name:  u.Name,
+        Email: u.Email,
+    }, nil
 }
 ```
 
@@ -393,16 +412,16 @@ func (uc *UserUsecase) GetUser(ctx context.Context, id int64) (*user.User, error
 // Converts protobuf ↔ domain models
 func (s *UserServiceServer) GetUser(ctx context.Context, req *pb.GetUserRequest) (*pb.GetUserResponse, error) {
     // Extract domain data from protobuf
-    user, err := s.uc.GetUser(ctx, req.Id)
+    userResp, err := s.uc.GetUser(ctx, user.GetUserRequest{ID: req.Id})
     if err != nil {
         return nil, err
     }
 
     // Convert domain model to protobuf
     return &pb.GetUserResponse{
-        Id:    user.ID,
-        Name:  user.Name,
-        Email: user.Email,
+        Id:    userResp.ID,
+        Name:  userResp.Name,
+        Email: userResp.Email,
     }, nil
 }
 ```
@@ -420,7 +439,7 @@ func (h *UserHandler) GetUser(c *gin.Context) {
     }
 
     // Call business logic
-    user, err := h.uc.GetUser(c.Request.Context(), id)
+    userResp, err := h.uc.GetUser(c.Request.Context(), user.GetUserRequest{ID: id})
     if err != nil {
         c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
         return
@@ -428,9 +447,9 @@ func (h *UserHandler) GetUser(c *gin.Context) {
 
     // Convert domain model to JSON response
     c.JSON(http.StatusOK, gin.H{
-        "id":    user.ID,
-        "name":  user.Name,
-        "email": user.Email,
+        "id":    userResp.ID,
+        "name":  userResp.Name,
+        "email": userResp.Email,
     })
 }
 ```
@@ -475,7 +494,7 @@ func (r *UserRepoPG) GetByID(ctx context.Context, id int64) (*user.User, error) 
 **Application composition and lifecycle management**
 
 ```go
-func NewGRPCServer(uc *user.UserUsecase) *grpc.Server {
+func NewGRPCServer(uc user.UserUsecase) *grpc.Server {
     grpcServer := grpc.NewServer()
     pb.RegisterUserServiceServer(grpcServer, grpcadapter.NewUserServiceServer(uc))
     return grpcServer
@@ -502,12 +521,18 @@ type UserUsecase struct {
 }
 
 // GOOD: Usecase depends on abstraction
-type UserRepository interface {
-    GetByID(ctx context.Context, id int64) (*user.User, error)
+type UserUsecase interface {
+    GetUser(ctx context.Context, req GetUserRequest) (*GetUserResponse, error)
+    CreateUser(ctx context.Context, req CreateUserRequest) (*CreateUserResponse, error)
 }
 
-type UserUsecase struct {
-    repo UserRepository  // Can be Postgres, MySQL, MongoDB, Mock!
+type Repository interface {
+    GetByID(ctx context.Context, id int64) (*user.User, error)
+    Create(ctx context.Context, u *user.User) (int64, error)
+}
+
+type Usecase struct {
+    repo Repository  // Can be Postgres, MySQL, MongoDB, Mock!
 }
 ```
 
@@ -617,7 +642,7 @@ type Container struct {
     Logger      *zap.Logger
     DB          *gorm.DB
     RedisClient *redisclient.Client
-    UserUC      *user.Usecase
+    UserUC      user.UserUsecase
     RateLimiter *middleware.RateLimiter
 }
 ```
