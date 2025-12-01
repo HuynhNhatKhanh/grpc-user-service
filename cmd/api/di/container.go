@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"grpc-user-service/cmd/api/infrastructure"
 	"grpc-user-service/internal/adapter/cache"
-	"grpc-user-service/internal/adapter/db/postgres"
 	ginhandler "grpc-user-service/internal/adapter/gin/handler"
 	"grpc-user-service/internal/adapter/grpc/middleware"
+	"grpc-user-service/internal/adapter/repository/cached"
+	"grpc-user-service/internal/adapter/repository/postgres"
 	"grpc-user-service/internal/config"
 	"grpc-user-service/internal/usecase/user"
 	redisclient "grpc-user-service/pkg/redis"
@@ -54,10 +55,11 @@ func NewContainer(cfg *config.Config, l *zap.Logger) (*Container, error) {
 	)
 
 	// Initialize repository
-	repo := postgres.NewUserRepoPG(db, l)
+	dbRepo := postgres.NewUserRepoPG(db, l)
+	repo := cached.NewCachedUserRepository(dbRepo, userCache, l)
 
 	// Initialize use case
-	userUC := user.New(repo, userCache, l)
+	userUC := user.New(repo, l)
 
 	// Initialize rate limiter
 	rateLimiter := middleware.NewRateLimiter(

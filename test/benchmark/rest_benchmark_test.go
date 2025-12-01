@@ -37,7 +37,7 @@ var restPortCounter int64 = 40000
 func setupRESTBenchmarkServer(b *testing.B) *RESTBenchmarkServer {
 	logger := zaptest.NewLogger(b)
 	mockRepo := NewMockRepository()
-	userUsecase := user.New(mockRepo, nil, logger)
+	userUsecase := user.New(mockRepo, logger)
 
 	// Get unique port using atomic counter
 	grpcPort := atomic.AddInt64(&restPortCounter, 1)

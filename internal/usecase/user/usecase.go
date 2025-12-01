@@ -6,9 +6,7 @@ import (
 	"strings"
 
 	"go.uber.org/zap"
-	"golang.org/x/sync/singleflight"
 
-	"grpc-user-service/internal/adapter/cache"
 	domain "grpc-user-service/internal/domain/user"
 	pkgerrors "grpc-user-service/pkg/errors"
 
@@ -31,16 +29,13 @@ type Repository interface {
 // It provides a clean separation between the transport layer and data layer.
 type Usecase struct {
 	repo     Repository          // Repository for data access
-	cache    cache.UserCache     // Cache for user data
 	log      *zap.Logger         // Logger for structured logging
 	validate *validator.Validate // Validator for request validation
-	group    singleflight.Group  // Single-flight group for cache stampede protection
 }
 
-// New creates a new instance of Usecase with the provided repository, cache, and logger.
-// If cache is nil, caching will be disabled.
-func New(r Repository, c cache.UserCache, log *zap.Logger) *Usecase {
-	return &Usecase{repo: r, cache: c, log: log, validate: validator.New()}
+// New creates a new instance of Usecase with the provided repository and logger.
+func New(r Repository, log *zap.Logger) *Usecase {
+	return &Usecase{repo: r, log: log, validate: validator.New()}
 }
 
 // formatValidationError converts validator.ValidationErrors into a human-readable error message.
@@ -100,7 +95,6 @@ func (uc *Usecase) CreateUser(ctx context.Context, in CreateUserRequest) (*Creat
 }
 
 // UpdateUser updates an existing user after validating the request and checking email uniqueness.
-// It invalidates the cache after successful update.
 func (uc *Usecase) UpdateUser(ctx context.Context, in UpdateUserRequest) (*UpdateUserResponse, error) {
 	uc.log.Info("updating user", zap.Int64("id", in.ID), zap.String("name", in.Name), zap.String("email", in.Email))
 
@@ -133,18 +127,10 @@ func (uc *Usecase) UpdateUser(ctx context.Context, in UpdateUserRequest) (*Updat
 		return nil, err
 	}
 
-	// Invalidate cache after successful update
-	if uc.cache != nil {
-		if err := uc.cache.Delete(ctx, in.ID); err != nil {
-			uc.log.Warn("failed to invalidate cache after update", zap.Int64("id", in.ID), zap.Error(err))
-		}
-	}
-
 	return &UpdateUserResponse{ID: id}, nil
 }
 
 // DeleteUser deletes a user after validating the user ID.
-// It invalidates the cache after successful deletion.
 func (uc *Usecase) DeleteUser(ctx context.Context, in DeleteUserRequest) (*DeleteUserResponse, error) {
 	uc.log.Info("deleting user", zap.Int64("id", in.ID))
 
@@ -159,73 +145,22 @@ func (uc *Usecase) DeleteUser(ctx context.Context, in DeleteUserRequest) (*Delet
 		return nil, err
 	}
 
-	// Invalidate cache after successful deletion
-	if uc.cache != nil {
-		if err := uc.cache.Delete(ctx, in.ID); err != nil {
-			uc.log.Warn("failed to invalidate cache after delete", zap.Int64("id", in.ID), zap.Error(err))
-		}
-	}
-
 	return &DeleteUserResponse{ID: id}, nil
 }
 
 // GetUser retrieves a user by ID after validating the request.
-// It uses cache-aside pattern with single-flight protection to prevent cache stampede.
 func (uc *Usecase) GetUser(ctx context.Context, in GetUserRequest) (*GetUserResponse, error) {
 	if in.ID <= 0 {
 		uc.log.Warn("get user validation failed", zap.Int64("id", in.ID), zap.String("reason", "invalid id"))
 		return nil, pkgerrors.NewValidationError("id", "invalid user id")
 	}
 
-	// Try to get from cache first
-	if uc.cache != nil {
-		cachedUser, err := uc.cache.Get(ctx, in.ID)
-		if err != nil {
-			uc.log.Warn("cache get error, falling back to database", zap.Int64("id", in.ID), zap.Error(err))
-		} else if cachedUser != nil {
-			uc.log.Debug("user retrieved from cache", zap.Int64("id", in.ID))
-			return &GetUserResponse{
-				ID:    cachedUser.ID,
-				Name:  cachedUser.Name,
-				Email: cachedUser.Email,
-			}, nil
-		}
-	}
-
-	// Cache miss or cache disabled - use single-flight to prevent stampede
-	key := fmt.Sprintf("user:%d", in.ID)
-	result, err, _ := uc.group.Do(key, func() (any, error) {
-		// Double-check cache in case another request populated it while we were waiting
-		if uc.cache != nil {
-			cachedUser, err := uc.cache.Get(ctx, in.ID)
-			if err == nil && cachedUser != nil {
-				uc.log.Debug("user retrieved from cache after single-flight wait", zap.Int64("id", in.ID))
-				return cachedUser, nil
-			}
-		}
-
-		// Only one request hits database
-		u, err := uc.repo.GetByID(ctx, in.ID)
-		if err != nil {
-			return nil, err
-		}
-
-		// Store in cache for future requests
-		if uc.cache != nil {
-			if err := uc.cache.Set(ctx, u); err != nil {
-				uc.log.Warn("failed to cache user", zap.Int64("id", in.ID), zap.Error(err))
-			}
-		}
-
-		return u, nil
-	})
-
+	user, err := uc.repo.GetByID(ctx, in.ID)
 	if err != nil {
 		uc.log.Error("failed to get user", zap.Int64("id", in.ID), zap.Error(err))
 		return nil, err
 	}
 
-	user := result.(*domain.User)
 	return &GetUserResponse{
 		ID:    user.ID,
 		Name:  user.Name,

@@ -33,7 +33,7 @@ var ginPortCounter int64 = 30000
 func setupGinBenchmarkServer(b *testing.B) *GinBenchmarkServer {
 	logger := zaptest.NewLogger(b)
 	mockRepo := NewMockRepository()
-	userUsecase := user.New(mockRepo, nil, logger)
+	userUsecase := user.New(mockRepo, logger)
 
 	// Setup Redis client (mock for benchmarking)
 	rdb := redis.NewClient(&redis.Options{

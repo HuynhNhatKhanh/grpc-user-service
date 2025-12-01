@@ -81,7 +81,7 @@ func (suite *UserAPIIntegrationTestSuite) SetupSuite() {
 	// Setup mock repository and usecase
 	suite.mockRepo = new(MockRepository)
 	logger := zaptest.NewLogger(suite.T())
-	suite.userUsecase = user.New(suite.mockRepo, nil, logger) // nil cache for integration tests
+	suite.userUsecase = user.New(suite.mockRepo, logger)
 
 	// Start gRPC server in a goroutine
 	go func() {

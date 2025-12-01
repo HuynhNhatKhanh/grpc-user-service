@@ -133,8 +133,8 @@ This project follows **Clean Architecture** principles with clear dependency rul
 │  │  • grpc/      - gRPC server implementation            │ │
 │  │  • http/      - HTTP handlers & middleware            │ │
 │  │  • gin/       - Gin REST API handlers & middleware    │ │
-│  │  • db/        - Database implementations (Postgres)   │ │
-│  │  • cache/     - Cache implementations (Redis)         │ │
+│  │  • repository/- Repository implementations (PG, Cache)│ │
+│  │  • cache/     - Cache client wrappers (Redis)         │ │
 │  └────────────────────────────────────────────────────────┘ │
 └───────────────────────────┬─────────────────────────────────┘
                             │ depends on ↓
@@ -223,10 +223,13 @@ grpc-user-service/
 │   │   │   ├── handler/          # Gin HTTP handlers
 │   │   │   ├── middleware/       # Gin middleware (logger, recovery, rate limiting)
 │   │   │   └── router/           # Gin router configuration
-│   │   ├── db/                   # Database implementations
-│   │   │   └── postgres/         # PostgreSQL repository
-│   │   └── cache/                # Cache implementations
-│   │       └── user_cache.go     # Redis cache
+│   │   ├── repository/           # Repository implementations
+│   │   │   ├── postgres/         # PostgreSQL implementation
+│   │   │   │   └── user.go       # DB operations
+│   │   │   └── cached/           # Cached implementation
+│   │   │       └── user.go       # Cache-Aside logic
+│   │   └── cache/                # Cache client wrappers
+│   │       └── user_cache.go     # Redis cache interface
 │   │
 │   └── config/                   # Configuration with validation
 │       └── config.go             # Config loading & validation

@@ -127,7 +127,7 @@ var grpcPortCounter int64 = 50000
 func setupBenchmarkServer(b *testing.B) *BenchmarkServer {
 	logger := zaptest.NewLogger(b)
 	mockRepo := NewMockRepository()
-	userUsecase := user.New(mockRepo, nil, logger)
+	userUsecase := user.New(mockRepo, logger)
 
 	// Get unique port using atomic counter
 	port := atomic.AddInt64(&grpcPortCounter, 1)
