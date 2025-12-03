@@ -1,5 +1,4 @@
 //go:build ignore
-// +build ignore
 
 package main
 
@@ -80,10 +79,11 @@ func main() {
 		var grpcTests, restTests int
 
 		for _, report := range reports {
-			if report.Protocol == "gRPC" {
+			switch report.Protocol {
+			case "gRPC":
 				avgGRPCThroughput += report.Throughput.RequestsPerSecond
 				grpcTests++
-			} else if report.Protocol == "REST" {
+			case "REST":
 				avgRESTThroughput += report.Throughput.RequestsPerSecond
 				restTests++
 			}

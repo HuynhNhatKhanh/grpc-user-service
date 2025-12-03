@@ -89,11 +89,11 @@ func setupGinBenchmarkServer(b *testing.B) *GinBenchmarkServer {
 func (gs *GinBenchmarkServer) Close() {
 	if gs.httpServer != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		gs.httpServer.Shutdown(ctx)
+		_ = gs.httpServer.Shutdown(ctx)
 		cancel()
 	}
 	if gs.redisClient != nil {
-		gs.redisClient.Close()
+		_ = gs.redisClient.Close()
 	}
 }
 
@@ -145,7 +145,7 @@ func BenchmarkGin_CreateUser(b *testing.B) {
 				b.Errorf("Request failed: %v", err)
 				continue
 			}
-			resp.Body.Close()
+			_ = resp.Body.Close()
 
 			if resp.StatusCode != http.StatusOK {
 				b.Errorf("Expected status 200, got %d", resp.StatusCode)
@@ -167,7 +167,7 @@ func BenchmarkGin_GetUser(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to create test user: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var createResp map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&createResp); err != nil {
@@ -185,7 +185,7 @@ func BenchmarkGin_GetUser(b *testing.B) {
 				b.Errorf("Request failed: %v", err)
 				continue
 			}
-			resp.Body.Close()
+			_ = resp.Body.Close()
 
 			if resp.StatusCode != http.StatusOK {
 				b.Errorf("Expected status 200, got %d", resp.StatusCode)
@@ -207,7 +207,7 @@ func BenchmarkGin_UpdateUser(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to create test user: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var createResp map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&createResp); err != nil {
@@ -230,7 +230,7 @@ func BenchmarkGin_UpdateUser(b *testing.B) {
 				b.Errorf("Request failed: %v", err)
 				continue
 			}
-			resp.Body.Close()
+			_ = resp.Body.Close()
 
 			if resp.StatusCode != http.StatusOK {
 				b.Errorf("Expected status 200, got %d", resp.StatusCode)
@@ -261,18 +261,18 @@ func BenchmarkGin_DeleteUser(b *testing.B) {
 			}
 
 			if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-				resp.Body.Close()
+				_ = resp.Body.Close()
 				b.Errorf("Create request failed with status: %d", resp.StatusCode)
 				continue
 			}
 
 			var createResp map[string]interface{}
 			if err := json.NewDecoder(resp.Body).Decode(&createResp); err != nil {
-				resp.Body.Close()
+				_ = resp.Body.Close()
 				b.Errorf("Failed to decode create response: %v", err)
 				continue
 			}
-			resp.Body.Close()
+			_ = resp.Body.Close()
 
 			idVal, ok := createResp["id"].(float64)
 			if !ok {
@@ -287,7 +287,7 @@ func BenchmarkGin_DeleteUser(b *testing.B) {
 				b.Errorf("Delete request failed: %v", err)
 				continue
 			}
-			resp.Body.Close()
+			_ = resp.Body.Close()
 
 			if resp.StatusCode != http.StatusOK {
 				b.Errorf("Expected status 200, got %d", resp.StatusCode)
@@ -296,6 +296,7 @@ func BenchmarkGin_DeleteUser(b *testing.B) {
 	})
 }
 
+//nolint:dupl // Benchmark test duplication is acceptable
 func BenchmarkGin_ListUsers(b *testing.B) {
 	gs := setupGinBenchmarkServer(b)
 	defer gs.Close()
@@ -310,7 +311,7 @@ func BenchmarkGin_ListUsers(b *testing.B) {
 		if err != nil {
 			b.Fatalf("Failed to create test user %d: %v", i, err)
 		}
-		resp.Body.Close()
+		_ = resp.Body.Close()
 	}
 
 	b.ResetTimer()
@@ -323,7 +324,7 @@ func BenchmarkGin_ListUsers(b *testing.B) {
 				b.Errorf("Request failed: %v", err)
 				continue
 			}
-			resp.Body.Close()
+			_ = resp.Body.Close()
 
 			if resp.StatusCode != http.StatusOK {
 				b.Errorf("Expected status 200, got %d", resp.StatusCode)
@@ -351,10 +352,10 @@ func BenchmarkGin_MixedWorkload(b *testing.B) {
 
 		var createResp map[string]interface{}
 		if err := json.NewDecoder(resp.Body).Decode(&createResp); err != nil {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			b.Fatalf("Failed to decode create response: %v", err)
 		}
-		resp.Body.Close()
+		_ = resp.Body.Close()
 
 		userIDs = append(userIDs, fmt.Sprintf("%.0f", createResp["id"].(float64)))
 	}
@@ -373,7 +374,7 @@ func BenchmarkGin_MixedWorkload(b *testing.B) {
 				}
 				resp, err := gs.makeRequest("POST", "/v1/users", requestBody)
 				if err == nil {
-					resp.Body.Close()
+					_ = resp.Body.Close()
 				}
 
 			case 1: // Get
@@ -381,7 +382,7 @@ func BenchmarkGin_MixedWorkload(b *testing.B) {
 					userID := userIDs[i%len(userIDs)]
 					resp, err := gs.makeRequest("GET", "/v1/users/"+userID, nil)
 					if err == nil {
-						resp.Body.Close()
+						_ = resp.Body.Close()
 					}
 				}
 
@@ -394,14 +395,14 @@ func BenchmarkGin_MixedWorkload(b *testing.B) {
 					}
 					resp, err := gs.makeRequest("PUT", "/v1/users/"+userID, requestBody)
 					if err == nil {
-						resp.Body.Close()
+						_ = resp.Body.Close()
 					}
 				}
 
 			case 3: // List
 				resp, err := gs.makeRequest("GET", "/v1/users?page=1&limit=10", nil)
 				if err == nil {
-					resp.Body.Close()
+					_ = resp.Body.Close()
 				}
 			}
 

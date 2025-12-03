@@ -30,6 +30,8 @@ type ThroughputMetrics struct {
 }
 
 // BenchmarkReport holds comprehensive benchmark results
+//
+//nolint:revive // Benchmark naming is intentional for clarity
 type BenchmarkReport struct {
 	TestName    string            `json:"test_name"`
 	Protocol    string            `json:"protocol"`
@@ -234,6 +236,8 @@ func CompareReports(report1, report2 *BenchmarkReport) {
 }
 
 // Expected performance targets based on requirements
+//
+//nolint:revive // ExpectedTargets naming is self-explanatory
 var ExpectedTargets = map[string]map[string]time.Duration{
 	"gRPC": {
 		"p50": 1 * time.Millisecond,

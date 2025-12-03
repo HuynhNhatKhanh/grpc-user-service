@@ -53,6 +53,7 @@ func setupRESTBenchmarkServer(b *testing.B) *RESTBenchmarkServer {
 	grpcServer := grpc.NewServer()
 	pb.RegisterUserServiceServer(grpcServer, grpcadapter.NewUserServiceServer(userUsecase, logger))
 
+	//nolint:noctx // Benchmark test server setup requires net.Listen
 	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", grpcPort))
 	if err != nil {
 		b.Fatalf("Failed to listen: %v", err)
@@ -125,17 +126,17 @@ func setupRESTBenchmarkServer(b *testing.B) *RESTBenchmarkServer {
 func (rs *RESTBenchmarkServer) Close() {
 	if rs.httpServer != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		rs.httpServer.Shutdown(ctx)
+		_ = rs.httpServer.Shutdown(ctx)
 		cancel()
 	}
 	if rs.conn != nil {
-		rs.conn.Close()
+		_ = rs.conn.Close()
 	}
 	if rs.grpcServer != nil {
 		rs.grpcServer.GracefulStop()
 	}
 	if rs.listener != nil {
-		rs.listener.Close()
+		_ = rs.listener.Close()
 	}
 }
 
@@ -187,7 +188,7 @@ func BenchmarkREST_CreateUser(b *testing.B) {
 				b.Errorf("Request failed: %v", err)
 				continue
 			}
-			resp.Body.Close()
+			_ = resp.Body.Close()
 
 			if resp.StatusCode != http.StatusOK {
 				b.Errorf("Expected status 200, got %d", resp.StatusCode)
@@ -209,7 +210,7 @@ func BenchmarkREST_GetUser(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to create test user: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var createResp map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&createResp); err != nil {
@@ -230,7 +231,7 @@ func BenchmarkREST_GetUser(b *testing.B) {
 				b.Errorf("Request failed: %v", err)
 				continue
 			}
-			resp.Body.Close()
+			_ = resp.Body.Close()
 
 			if resp.StatusCode != http.StatusOK {
 				b.Errorf("Expected status 200, got %d", resp.StatusCode)
@@ -252,7 +253,7 @@ func BenchmarkREST_UpdateUser(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to create test user: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var createResp map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&createResp); err != nil {
@@ -279,7 +280,7 @@ func BenchmarkREST_UpdateUser(b *testing.B) {
 				b.Errorf("Request failed: %v", err)
 				continue
 			}
-			resp.Body.Close()
+			_ = resp.Body.Close()
 
 			if resp.StatusCode != http.StatusOK {
 				b.Errorf("Expected status 200, got %d", resp.StatusCode)
@@ -311,11 +312,11 @@ func BenchmarkREST_DeleteUser(b *testing.B) {
 
 			var createResp map[string]interface{}
 			if err := json.NewDecoder(resp.Body).Decode(&createResp); err != nil {
-				resp.Body.Close()
+				_ = resp.Body.Close()
 				b.Errorf("Failed to decode create response: %v", err)
 				continue
 			}
-			resp.Body.Close()
+			_ = resp.Body.Close()
 
 			userID, ok := createResp["id"].(string)
 			if !ok {
@@ -329,7 +330,7 @@ func BenchmarkREST_DeleteUser(b *testing.B) {
 				b.Errorf("Delete request failed: %v", err)
 				continue
 			}
-			resp.Body.Close()
+			_ = resp.Body.Close()
 
 			if resp.StatusCode != http.StatusOK {
 				b.Errorf("Expected status 200, got %d", resp.StatusCode)
@@ -338,6 +339,7 @@ func BenchmarkREST_DeleteUser(b *testing.B) {
 	})
 }
 
+//nolint:dupl // Benchmark test duplication is acceptable
 func BenchmarkREST_ListUsers(b *testing.B) {
 	rs := setupRESTBenchmarkServer(b)
 	defer rs.Close()
@@ -352,7 +354,7 @@ func BenchmarkREST_ListUsers(b *testing.B) {
 		if err != nil {
 			b.Fatalf("Failed to create test user %d: %v", i, err)
 		}
-		resp.Body.Close()
+		_ = resp.Body.Close()
 	}
 
 	b.ResetTimer()
@@ -365,7 +367,7 @@ func BenchmarkREST_ListUsers(b *testing.B) {
 				b.Errorf("Request failed: %v", err)
 				continue
 			}
-			resp.Body.Close()
+			_ = resp.Body.Close()
 
 			if resp.StatusCode != http.StatusOK {
 				b.Errorf("Expected status 200, got %d", resp.StatusCode)
@@ -375,6 +377,8 @@ func BenchmarkREST_ListUsers(b *testing.B) {
 }
 
 // Mixed workload benchmark for REST
+//
+//nolint:gocyclo // Benchmark test complexity is acceptable
 func BenchmarkREST_MixedWorkload(b *testing.B) {
 	rs := setupRESTBenchmarkServer(b)
 	defer rs.Close()
@@ -393,10 +397,10 @@ func BenchmarkREST_MixedWorkload(b *testing.B) {
 
 		var createResp map[string]interface{}
 		if err := json.NewDecoder(resp.Body).Decode(&createResp); err != nil {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			b.Fatalf("Failed to decode create response: %v", err)
 		}
-		resp.Body.Close()
+		_ = resp.Body.Close()
 
 		userID, ok := createResp["id"].(string)
 		if !ok {
@@ -419,7 +423,7 @@ func BenchmarkREST_MixedWorkload(b *testing.B) {
 				}
 				resp, err := rs.makeRequest("POST", "/v1/users", requestBody)
 				if err == nil {
-					resp.Body.Close()
+					_ = resp.Body.Close()
 				}
 
 			case 1: // Get
@@ -427,7 +431,7 @@ func BenchmarkREST_MixedWorkload(b *testing.B) {
 					userID := userIDs[i%len(userIDs)]
 					resp, err := rs.makeRequest("GET", "/v1/users/"+userID, nil)
 					if err == nil {
-						resp.Body.Close()
+						_ = resp.Body.Close()
 					}
 				}
 
@@ -441,14 +445,14 @@ func BenchmarkREST_MixedWorkload(b *testing.B) {
 					}
 					resp, err := rs.makeRequest("PUT", "/v1/users/"+userID, requestBody)
 					if err == nil {
-						resp.Body.Close()
+						_ = resp.Body.Close()
 					}
 				}
 
 			case 3: // List
 				resp, err := rs.makeRequest("GET", "/v1/users?page=1&limit=10", nil)
 				if err == nil {
-					resp.Body.Close()
+					_ = resp.Body.Close()
 				}
 			}
 

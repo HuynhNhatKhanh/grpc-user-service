@@ -4,6 +4,8 @@ run:
   timeout: 5m # Enough time for image/video pipelines
   tests: true # Also lint test files
   concurrency: 4 # Run linters in parallel
+  skip-dirs:
+    - test/benchmark
 
 linters:
   enable:

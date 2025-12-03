@@ -124,7 +124,7 @@ func (a *App) shutdown() error {
 		a.Logger.Info("shutting down Gin server...")
 		if err := a.Server.Gin.Shutdown(shutdownCtx); err != nil {
 			a.Logger.Error("failed to shutdown Gin server", zap.Error(err))
-			errs = append(errs, fmt.Errorf("Gin shutdown: %w", err))
+			errs = append(errs, fmt.Errorf("gin shutdown: %w", err))
 		}
 	}
 

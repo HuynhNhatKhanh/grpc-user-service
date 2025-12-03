@@ -25,17 +25,17 @@ type Repository interface {
 	List(ctx context.Context, query string, page, limit int64) ([]domain.User, int64, error) // List users with pagination and search, returns users and total count
 }
 
-// Usecase implements the business logic for user management operations.
+// usecaseImpl implements the business logic for user management operations.
 // It provides a clean separation between the transport layer and data layer.
-type Usecase struct {
+type usecaseImpl struct {
 	repo     Repository          // Repository for data access
 	log      *zap.Logger         // Logger for structured logging
 	validate *validator.Validate // Validator for request validation
 }
 
 // New creates a new instance of Usecase with the provided repository and logger.
-func New(r Repository, log *zap.Logger) *Usecase {
-	return &Usecase{repo: r, log: log, validate: validator.New()}
+func New(r Repository, log *zap.Logger) Usecase {
+	return &usecaseImpl{repo: r, log: log, validate: validator.New()}
 }
 
 // formatValidationError converts validator.ValidationErrors into a human-readable error message.
@@ -62,7 +62,7 @@ func formatValidationError(err error) error {
 }
 
 // CreateUser creates a new user after validating the request and checking email uniqueness.
-func (uc *Usecase) CreateUser(ctx context.Context, in CreateUserRequest) (*CreateUserResponse, error) {
+func (uc *usecaseImpl) CreateUser(ctx context.Context, in CreateUserRequest) (*CreateUserResponse, error) {
 	uc.log.Info("creating user", zap.String("name", in.Name), zap.String("email", in.Email))
 
 	if err := uc.validate.Struct(in); err != nil {
@@ -95,7 +95,7 @@ func (uc *Usecase) CreateUser(ctx context.Context, in CreateUserRequest) (*Creat
 }
 
 // UpdateUser updates an existing user after validating the request and checking email uniqueness.
-func (uc *Usecase) UpdateUser(ctx context.Context, in UpdateUserRequest) (*UpdateUserResponse, error) {
+func (uc *usecaseImpl) UpdateUser(ctx context.Context, in UpdateUserRequest) (*UpdateUserResponse, error) {
 	uc.log.Info("updating user", zap.Int64("id", in.ID), zap.String("name", in.Name), zap.String("email", in.Email))
 
 	if err := uc.validate.Struct(in); err != nil {
@@ -131,7 +131,7 @@ func (uc *Usecase) UpdateUser(ctx context.Context, in UpdateUserRequest) (*Updat
 }
 
 // DeleteUser deletes a user after validating the user ID.
-func (uc *Usecase) DeleteUser(ctx context.Context, in DeleteUserRequest) (*DeleteUserResponse, error) {
+func (uc *usecaseImpl) DeleteUser(ctx context.Context, in DeleteUserRequest) (*DeleteUserResponse, error) {
 	uc.log.Info("deleting user", zap.Int64("id", in.ID))
 
 	if in.ID <= 0 {
@@ -149,7 +149,7 @@ func (uc *Usecase) DeleteUser(ctx context.Context, in DeleteUserRequest) (*Delet
 }
 
 // GetUser retrieves a user by ID after validating the request.
-func (uc *Usecase) GetUser(ctx context.Context, in GetUserRequest) (*GetUserResponse, error) {
+func (uc *usecaseImpl) GetUser(ctx context.Context, in GetUserRequest) (*GetUserResponse, error) {
 	if in.ID <= 0 {
 		uc.log.Warn("get user validation failed", zap.Int64("id", in.ID), zap.String("reason", "invalid id"))
 		return nil, pkgerrors.NewValidationError("id", "invalid user id")
@@ -169,7 +169,7 @@ func (uc *Usecase) GetUser(ctx context.Context, in GetUserRequest) (*GetUserResp
 }
 
 // ListUsers retrieves a paginated list of users with optional search functionality.
-func (uc *Usecase) ListUsers(ctx context.Context, in ListUsersRequest) (*ListUsersResponse, error) {
+func (uc *usecaseImpl) ListUsers(ctx context.Context, in ListUsersRequest) (*ListUsersResponse, error) {
 	if in.Page <= 0 {
 		in.Page = 1
 	}

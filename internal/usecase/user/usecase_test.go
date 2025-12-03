@@ -55,7 +55,7 @@ func (m *MockRepository) List(ctx context.Context, query string, page, limit int
 }
 
 // Test helper để tạo usecase với mock repo
-func setupTestUsecase(t *testing.T) (*Usecase, *MockRepository) {
+func setupTestUsecase(t *testing.T) (Usecase, *MockRepository) {
 	mockRepo := new(MockRepository)
 	logger := zaptest.NewLogger(t)
 	uc := New(mockRepo, logger)

@@ -11,6 +11,8 @@ import (
 )
 
 // BenchmarkConfig holds configuration for benchmark runs
+//
+//nolint:revive // Benchmark naming is intentional for clarity
 type BenchmarkConfig struct {
 	Duration         time.Duration `json:"duration"`
 	Concurrency      int           `json:"concurrency"`
@@ -37,6 +39,8 @@ func DefaultBenchmarkConfig() *BenchmarkConfig {
 }
 
 // BenchmarkRunner executes comprehensive benchmarks
+//
+//nolint:revive // Benchmark naming is intentional for clarity
 type BenchmarkRunner struct {
 	config *BenchmarkConfig
 }
@@ -158,7 +162,7 @@ func (br *BenchmarkRunner) runSingleBenchmark(protocol, testName string, testFun
 	// Start concurrent workers
 	for i := 0; i < br.config.Concurrency; i++ {
 		wg.Add(1)
-		go func(workerID int) {
+		go func() {
 			defer wg.Done()
 			workerCollector := NewMetricsCollector()
 
@@ -175,7 +179,7 @@ func (br *BenchmarkRunner) runSingleBenchmark(protocol, testName string, testFun
 					workerCollector.RecordLatency(duration)
 				}
 			}
-		}(i)
+		}()
 	}
 
 	// Wait for all workers to complete
@@ -361,7 +365,7 @@ func (br *BenchmarkRunner) saveReports(reports []*BenchmarkReport) {
 		output = br.generateTableFormat(reports)
 	}
 
-	err := os.WriteFile(br.config.OutputFile, []byte(output), 0644)
+	err := os.WriteFile(br.config.OutputFile, []byte(output), 0600)
 	if err != nil {
 		fmt.Printf("Error saving reports to file %s: %v\n", br.config.OutputFile, err)
 	} else {

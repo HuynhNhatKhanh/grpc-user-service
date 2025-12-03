@@ -12,7 +12,7 @@ import (
 )
 
 // SetupGRPC creates and configures the gRPC server
-func SetupGRPC(userUC user.UserUsecase, l *zap.Logger, rateLimiter *middleware.RateLimiter) *grpc.Server {
+func SetupGRPC(userUC user.Usecase, l *zap.Logger, rateLimiter *middleware.RateLimiter) *grpc.Server {
 	// Create gRPC server with request ID and rate limit interceptors
 	grpcServer := grpc.NewServer(
 		grpc.ChainUnaryInterceptor(

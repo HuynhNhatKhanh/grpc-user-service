@@ -73,7 +73,7 @@ type UserAPIIntegrationTestSuite struct {
 	httpClient  *http.Client
 	baseURL     string
 	mockRepo    *MockRepository
-	userUsecase user.UserUsecase
+	userUsecase user.Usecase
 }
 
 // SetupSuite starts the actual gRPC server and HTTP gateway for testing

@@ -93,7 +93,7 @@ func TestCreateUser(t *testing.T) {
 		})).Return(expectedResponse, nil)
 
 		w := httptest.NewRecorder()
-		req, _ := http.NewRequest("POST", "/users", bytes.NewBuffer(jsonBody))
+		req := httptest.NewRequest("POST", "/users", bytes.NewBuffer(jsonBody))
 		req.Header.Set("Content-Type", "application/json")
 		r.ServeHTTP(w, req)
 
@@ -110,7 +110,7 @@ func TestCreateUser(t *testing.T) {
 		r.POST("/users", handler.CreateUser)
 
 		w := httptest.NewRecorder()
-		req, _ := http.NewRequest("POST", "/users", bytes.NewBufferString("invalid json"))
+		req := httptest.NewRequest("POST", "/users", bytes.NewBufferString("invalid json"))
 		req.Header.Set("Content-Type", "application/json")
 		r.ServeHTTP(w, req)
 
@@ -128,7 +128,7 @@ func TestCreateUser(t *testing.T) {
 		jsonBody, _ := json.Marshal(reqBody)
 
 		w := httptest.NewRecorder()
-		req, _ := http.NewRequest("POST", "/users", bytes.NewBuffer(jsonBody))
+		req := httptest.NewRequest("POST", "/users", bytes.NewBuffer(jsonBody))
 		req.Header.Set("Content-Type", "application/json")
 		r.ServeHTTP(w, req)
 
@@ -148,7 +148,7 @@ func TestCreateUser(t *testing.T) {
 		mockUsecase.On("CreateUser", mock.Anything, mock.Anything).Return(nil, errors.New("internal error"))
 
 		w := httptest.NewRecorder()
-		req, _ := http.NewRequest("POST", "/users", bytes.NewBuffer(jsonBody))
+		req := httptest.NewRequest("POST", "/users", bytes.NewBuffer(jsonBody))
 		req.Header.Set("Content-Type", "application/json")
 		r.ServeHTTP(w, req)
 
@@ -170,7 +170,7 @@ func TestGetUser(t *testing.T) {
 		mockUsecase.On("GetUser", mock.Anything, usecase.GetUserRequest{ID: 1}).Return(expectedResponse, nil)
 
 		w := httptest.NewRecorder()
-		req, _ := http.NewRequest("GET", "/users/1", nil)
+		req := httptest.NewRequest("GET", "/users/1", nil)
 		r.ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusOK, w.Code)
@@ -186,7 +186,7 @@ func TestGetUser(t *testing.T) {
 		r.GET("/users/:id", handler.GetUser)
 
 		w := httptest.NewRecorder()
-		req, _ := http.NewRequest("GET", "/users/abc", nil)
+		req := httptest.NewRequest("GET", "/users/abc", nil)
 		r.ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -199,7 +199,7 @@ func TestGetUser(t *testing.T) {
 		mockUsecase.On("GetUser", mock.Anything, usecase.GetUserRequest{ID: 1}).Return(nil, pkgerrors.NewNotFoundError("user", "user not found"))
 
 		w := httptest.NewRecorder()
-		req, _ := http.NewRequest("GET", "/users/1", nil)
+		req := httptest.NewRequest("GET", "/users/1", nil)
 		r.ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusNotFound, w.Code)
@@ -226,7 +226,7 @@ func TestUpdateUser(t *testing.T) {
 		})).Return(expectedResponse, nil)
 
 		w := httptest.NewRecorder()
-		req, _ := http.NewRequest("PUT", "/users/1", bytes.NewBuffer(jsonBody))
+		req := httptest.NewRequest("PUT", "/users/1", bytes.NewBuffer(jsonBody))
 		req.Header.Set("Content-Type", "application/json")
 		r.ServeHTTP(w, req)
 
@@ -238,7 +238,7 @@ func TestUpdateUser(t *testing.T) {
 		r.PUT("/users/:id", handler.UpdateUser)
 
 		w := httptest.NewRecorder()
-		req, _ := http.NewRequest("PUT", "/users/abc", bytes.NewBufferString("{}"))
+		req := httptest.NewRequest("PUT", "/users/abc", bytes.NewBufferString("{}"))
 		r.ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -253,7 +253,7 @@ func TestDeleteUser(t *testing.T) {
 		mockUsecase.On("DeleteUser", mock.Anything, usecase.DeleteUserRequest{ID: 1}).Return(&usecase.DeleteUserResponse{ID: 1}, nil)
 
 		w := httptest.NewRecorder()
-		req, _ := http.NewRequest("DELETE", "/users/1", nil)
+		req := httptest.NewRequest("DELETE", "/users/1", nil)
 		r.ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusOK, w.Code)
@@ -282,7 +282,7 @@ func TestListUsers(t *testing.T) {
 		})).Return(expectedResponse, nil)
 
 		w := httptest.NewRecorder()
-		req, _ := http.NewRequest("GET", "/users?page=1&limit=10", nil)
+		req := httptest.NewRequest("GET", "/users?page=1&limit=10", nil)
 		r.ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusOK, w.Code)

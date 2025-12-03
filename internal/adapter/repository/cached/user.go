@@ -14,6 +14,7 @@ import (
 
 // CachedUserRepository implements user.Repository with caching support.
 // It wraps a persistent repository (DB) and a cache implementation.
+//nolint:revive // Acceptable naming pattern in Go
 type CachedUserRepository struct {
 	dbRepo user.Repository
 	cache  cache.UserCache

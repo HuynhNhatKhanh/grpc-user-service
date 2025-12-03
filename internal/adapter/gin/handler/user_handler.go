@@ -13,12 +13,12 @@ import (
 
 // UserHandler handles HTTP requests for user operations
 type UserHandler struct {
-	uc  user.UserUsecase
+	uc  user.Usecase
 	log *zap.Logger
 }
 
 // NewUserHandler creates a new UserHandler instance
-func NewUserHandler(uc user.UserUsecase, log *zap.Logger) *UserHandler {
+func NewUserHandler(uc user.Usecase, log *zap.Logger) *UserHandler {
 	return &UserHandler{
 		uc:  uc,
 		log: log,

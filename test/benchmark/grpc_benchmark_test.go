@@ -139,6 +139,7 @@ func setupBenchmarkServer(b *testing.B) *BenchmarkServer {
 	server := grpc.NewServer()
 	pb.RegisterUserServiceServer(server, grpcadapter.NewUserServiceServer(userUsecase, logger))
 
+	//nolint:noctx // Benchmark test server setup requires net.Listen
 	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 	if err != nil {
 		b.Fatalf("Failed to listen: %v", err)
@@ -182,13 +183,13 @@ func setupBenchmarkServer(b *testing.B) *BenchmarkServer {
 
 func (bs *BenchmarkServer) Close() {
 	if bs.conn != nil {
-		bs.conn.Close()
+		_ = bs.conn.Close()
 	}
 	if bs.server != nil {
 		bs.server.GracefulStop()
 	}
 	if bs.listener != nil {
-		bs.listener.Close()
+		_ = bs.listener.Close()
 	}
 }
 
@@ -331,7 +332,7 @@ func BenchmarkGRPC_ListUsers(b *testing.B) {
 			Name:  fmt.Sprintf("User_%d", i),
 			Email: fmt.Sprintf("user_%d@example.com", i),
 		}
-		bs.client.CreateUser(ctx, req)
+		_, _ = bs.client.CreateUser(ctx, req)
 	}
 
 	b.ResetTimer()
@@ -387,13 +388,13 @@ func BenchmarkGRPC_MixedWorkload(b *testing.B) {
 					Name:  fmt.Sprintf("MixedUser_%d", time.Now().UnixNano()),
 					Email: fmt.Sprintf("mixed_%d@example.com", time.Now().UnixNano()),
 				}
-				bs.client.CreateUser(ctx, req)
+				_, _ = bs.client.CreateUser(ctx, req)
 
 			case 1: // Get
 				if len(userIDs) > 0 {
 					userID := userIDs[i%len(userIDs)]
 					req := &pb.GetUserRequest{Id: userID}
-					bs.client.GetUser(ctx, req)
+					_, _ = bs.client.GetUser(ctx, req)
 				}
 
 			case 2: // Update
@@ -404,7 +405,7 @@ func BenchmarkGRPC_MixedWorkload(b *testing.B) {
 						Name:  fmt.Sprintf("Updated_%d", time.Now().UnixNano()),
 						Email: fmt.Sprintf("updated_%d@example.com", time.Now().UnixNano()),
 					}
-					bs.client.UpdateUser(ctx, req)
+					_, _ = bs.client.UpdateUser(ctx, req)
 				}
 
 			case 3: // List
@@ -412,7 +413,7 @@ func BenchmarkGRPC_MixedWorkload(b *testing.B) {
 					Page:  1,
 					Limit: 10,
 				}
-				bs.client.ListUsers(ctx, req)
+				_, _ = bs.client.ListUsers(ctx, req)
 			}
 
 			i++

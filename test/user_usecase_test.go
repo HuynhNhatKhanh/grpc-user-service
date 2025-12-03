@@ -58,7 +58,7 @@ func (m *ComprehensiveMockRepository) List(ctx context.Context, query string, pa
 
 // setupComprehensiveTestUsecase creates a new usecase instance with a mock repository for testing.
 // It returns both the usecase and the mock repository for test setup and verification.
-func setupComprehensiveTestUsecase(t *testing.T) (*grpcuser.Usecase, *ComprehensiveMockRepository) {
+func setupComprehensiveTestUsecase(t *testing.T) (grpcuser.Usecase, *ComprehensiveMockRepository) {
 	mockRepo := new(ComprehensiveMockRepository)
 	logger := zaptest.NewLogger(t)
 	uc := grpcuser.New(mockRepo, logger)
