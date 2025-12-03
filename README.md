@@ -102,7 +102,7 @@ grpc-user-service/
   - **Structured Logging**: Zap logger with request tracing.
 - **Performance**:
   - **Redis Caching**: Cache-aside pattern.
-  - **Rate Limiting**: Sliding window algorithm.
+  - **Rate Limiting**: Token Bucket algorithm (smooth rate limiting with burst support).
 
 ## 🤝 Contributing
 

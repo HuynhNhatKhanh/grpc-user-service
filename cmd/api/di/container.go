@@ -66,7 +66,7 @@ func NewContainer(cfg *config.Config, l *zap.Logger) (*Container, error) {
 		rdb.Client,
 		middleware.RateLimiterConfig{
 			RequestsPerSecond: cfg.RateLimit.RequestsPerSecond,
-			WindowSeconds:     cfg.RateLimit.WindowSeconds,
+			BurstCapacity:     cfg.RateLimit.BurstCapacity,
 			Enabled:           cfg.RateLimit.Enabled,
 		},
 		l,

@@ -13,14 +13,14 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// RateLimiterConfig holds configuration for the rate limiter.
+// RateLimiterConfig holds configuration for the Token Bucket rate limiter.
 type RateLimiterConfig struct {
-	RequestsPerSecond float64
-	WindowSeconds     int
+	RequestsPerSecond float64 // Token refill rate (tokens per second)
+	BurstCapacity     int     // Maximum tokens in bucket (allows burst traffic)
 	Enabled           bool
 }
 
-// RateLimiter implements gRPC rate limiting using Redis.
+// RateLimiter implements gRPC rate limiting using Token Bucket algorithm with Redis.
 type RateLimiter struct {
 	client *redis.Client
 	config RateLimiterConfig
@@ -52,28 +52,55 @@ func (rl *RateLimiter) UnaryInterceptor() grpc.UnaryServerInterceptor {
 		// Get client IP from peer info
 		clientIP := rl.getClientIP(ctx)
 
-		// Create rate limit key: ratelimit:{method}:{ip}
-		key := fmt.Sprintf("ratelimit:%s:%s", info.FullMethod, clientIP)
+		// Create rate limit key: ratelimit:tb:{method}:{ip}
+		key := fmt.Sprintf("ratelimit:tb:%s:%s", info.FullMethod, clientIP)
 
-		// Calculate maximum requests allowed in the window
-		maxRequests := int(rl.config.RequestsPerSecond * float64(rl.config.WindowSeconds))
-
-		// Use Redis Lua script for atomic increment with expiry
+		// Token Bucket algorithm implemented in Lua for atomicity
+		// Data structure: {last_refill_time, current_tokens}
 		luaScript := `
 			local key = KEYS[1]
-			local window = tonumber(ARGV[1])
-			local max_requests = tonumber(ARGV[2])
+			local rate = tonumber(ARGV[1])         -- tokens per second
+			local capacity = tonumber(ARGV[2])     -- max tokens in bucket
+			local now = tonumber(ARGV[3])          -- current timestamp
+			local requested = tonumber(ARGV[4])    -- tokens requested (always 1)
 			
-			local count = redis.call('INCR', key)
-			if count == 1 then
-				redis.call('EXPIRE', key, window)
+			-- Get current bucket state
+			local bucket = redis.call('HMGET', key, 'last_refill', 'tokens')
+			local last_refill = tonumber(bucket[1]) or now
+			local tokens = tonumber(bucket[2]) or capacity
+			
+			-- Calculate tokens to add based on elapsed time
+			local elapsed = math.max(0, now - last_refill)
+			local tokens_to_add = elapsed * rate
+			tokens = math.min(capacity, tokens + tokens_to_add)
+			
+			-- Try to consume requested tokens
+			if tokens >= requested then
+				-- Success: consume token
+				tokens = tokens - requested
+				redis.call('HMSET', key, 'last_refill', now, 'tokens', tokens)
+				redis.call('EXPIRE', key, 60)  -- Keep bucket for 60 seconds
+				return 1  -- Allow request
+			else
+				-- Failure: not enough tokens
+				-- Still update last_refill to prevent token accumulation during rate limit
+				redis.call('HMSET', key, 'last_refill', now, 'tokens', tokens)
+				redis.call('EXPIRE', key, 60)
+				return 0  -- Deny request
 			end
-			
-			return count
 		`
 
-		count, err := rl.client.Eval(ctx, luaScript, []string{key},
-			rl.config.WindowSeconds, maxRequests).Int64()
+		// Execute Lua script
+		// Get current timestamp in seconds (floating point for precision)
+		now := float64(rl.client.Time(ctx).Val().Unix())
+
+		allowed, err := rl.client.Eval(ctx, luaScript, []string{key},
+			rl.config.RequestsPerSecond,
+			rl.config.BurstCapacity,
+			now,
+			1, // Always request 1 token
+		).Int64()
+
 		if err != nil {
 			// On Redis error, allow request to proceed (fail open)
 			rl.log.Warn("rate limiter redis error, allowing request",
@@ -84,17 +111,17 @@ func (rl *RateLimiter) UnaryInterceptor() grpc.UnaryServerInterceptor {
 			return handler(ctx, req)
 		}
 
-		// Check if limit exceeded
-		if count > int64(maxRequests) {
+		// Check if request is allowed
+		if allowed == 0 {
 			rl.log.Warn("rate limit exceeded",
 				zap.String("client_ip", clientIP),
 				zap.String("method", info.FullMethod),
-				zap.Int64("count", count),
-				zap.Float64("limit", rl.config.RequestsPerSecond),
+				zap.Float64("rate", rl.config.RequestsPerSecond),
+				zap.Int("burst_capacity", rl.config.BurstCapacity),
 			)
 			return nil, status.Errorf(codes.ResourceExhausted,
-				"rate limit exceeded: %d requests in %d seconds (limit: %.0f req/s)",
-				count, rl.config.WindowSeconds, rl.config.RequestsPerSecond)
+				"rate limit exceeded: %.2f requests/second (burst capacity: %d)",
+				rl.config.RequestsPerSecond, rl.config.BurstCapacity)
 		}
 
 		// Allow request

@@ -65,11 +65,11 @@ type RedisConfig struct {
 	MinIdleConn int    `mapstructure:"REDIS_MIN_IDLE_CONN"`     // Minimum idle connections
 }
 
-// RateLimitConfig holds configuration parameters for rate limiting.
-// It controls how many requests are allowed per time window.
+// RateLimitConfig holds configuration parameters for Token Bucket rate limiting.
+// It controls the token refill rate and maximum burst capacity.
 type RateLimitConfig struct {
-	RequestsPerSecond float64 `mapstructure:"RATE_LIMIT_REQUESTS_PER_SECOND"` // Maximum requests per second
-	WindowSeconds     int     `mapstructure:"RATE_LIMIT_WINDOW_SECONDS"`      // Time window in seconds
+	RequestsPerSecond float64 `mapstructure:"RATE_LIMIT_REQUESTS_PER_SECOND"` // Token refill rate (tokens per second)
+	BurstCapacity     int     `mapstructure:"RATE_LIMIT_BURST_CAPACITY"`      // Maximum tokens in bucket (allows burst traffic)
 	Enabled           bool    `mapstructure:"RATE_LIMIT_ENABLED"`             // Enable/disable rate limiting
 }
 
@@ -132,7 +132,7 @@ func LoadConfig(path string) (*Config, error) {
 	config.Redis.MinIdleConn = viper.GetInt("REDIS_MIN_IDLE_CONN")
 
 	config.RateLimit.RequestsPerSecond = viper.GetFloat64("RATE_LIMIT_REQUESTS_PER_SECOND")
-	config.RateLimit.WindowSeconds = viper.GetInt("RATE_LIMIT_WINDOW_SECONDS")
+	config.RateLimit.BurstCapacity = viper.GetInt("RATE_LIMIT_BURST_CAPACITY")
 	config.RateLimit.Enabled = viper.GetBool("RATE_LIMIT_ENABLED")
 
 	return &config, nil
@@ -184,9 +184,9 @@ func setDefaults() {
 	viper.SetDefault("REDIS_POOL_SIZE", 10)
 	viper.SetDefault("REDIS_MIN_IDLE_CONN", 5)
 
-	// Rate limit defaults
+	// Rate limit defaults (Token Bucket)
 	viper.SetDefault("RATE_LIMIT_REQUESTS_PER_SECOND", 10.0)
-	viper.SetDefault("RATE_LIMIT_WINDOW_SECONDS", 1)
+	viper.SetDefault("RATE_LIMIT_BURST_CAPACITY", 20) // Allow burst up to 2x the rate
 	viper.SetDefault("RATE_LIMIT_ENABLED", true)
 }
 
@@ -341,9 +341,9 @@ func (c *RateLimitConfig) Validate() error {
 		return fmt.Errorf("RATE_LIMIT_REQUESTS_PER_SECOND must be positive when rate limiting is enabled, got %f",
 			c.RequestsPerSecond)
 	}
-	if c.WindowSeconds <= 0 {
-		return fmt.Errorf("RATE_LIMIT_WINDOW_SECONDS must be positive when rate limiting is enabled, got %d",
-			c.WindowSeconds)
+	if c.BurstCapacity <= 0 {
+		return fmt.Errorf("RATE_LIMIT_BURST_CAPACITY must be positive when rate limiting is enabled, got %d",
+			c.BurstCapacity)
 	}
 	return nil
 }

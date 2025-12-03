@@ -38,11 +38,10 @@ func mockHandler(ctx context.Context, req interface{}) (interface{}, error) {
 func TestRateLimiter_WithinLimit(t *testing.T) {
 	client, _ := setupTestRedis(t)
 
-
 	logger := zaptest.NewLogger(t)
 	config := RateLimiterConfig{
 		RequestsPerSecond: 10,
-		WindowSeconds:     1,
+		BurstCapacity:     10,
 		Enabled:           true,
 	}
 
@@ -68,11 +67,10 @@ func TestRateLimiter_WithinLimit(t *testing.T) {
 func TestRateLimiter_ExceedLimit(t *testing.T) {
 	client, _ := setupTestRedis(t)
 
-
 	logger := zaptest.NewLogger(t)
 	config := RateLimiterConfig{
 		RequestsPerSecond: 5,
-		WindowSeconds:     1,
+		BurstCapacity:     5, // Allow 5 requests immediately
 		Enabled:           true,
 	}
 
@@ -107,11 +105,10 @@ func TestRateLimiter_ExceedLimit(t *testing.T) {
 func TestRateLimiter_Disabled(t *testing.T) {
 	client, _ := setupTestRedis(t)
 
-
 	logger := zaptest.NewLogger(t)
 	config := RateLimiterConfig{
 		RequestsPerSecond: 1,
-		WindowSeconds:     1,
+		BurstCapacity:     10,  // Adequate burst capacity
 		Enabled:           false, // Disabled
 	}
 
@@ -136,11 +133,10 @@ func TestRateLimiter_Disabled(t *testing.T) {
 func TestRateLimiter_DifferentIPs(t *testing.T) {
 	client, _ := setupTestRedis(t)
 
-
 	logger := zaptest.NewLogger(t)
 	config := RateLimiterConfig{
 		RequestsPerSecond: 2,
-		WindowSeconds:     1,
+		BurstCapacity:     10,  // Adequate burst capacity
 		Enabled:           true,
 	}
 
@@ -173,11 +169,10 @@ func TestRateLimiter_DifferentIPs(t *testing.T) {
 func TestRateLimiter_XForwardedFor(t *testing.T) {
 	client, _ := setupTestRedis(t)
 
-
 	logger := zaptest.NewLogger(t)
 	config := RateLimiterConfig{
 		RequestsPerSecond: 5,
-		WindowSeconds:     1,
+		BurstCapacity:     10,  // Adequate burst capacity
 		Enabled:           true,
 	}
 
@@ -203,11 +198,10 @@ func TestRateLimiter_XForwardedFor(t *testing.T) {
 func TestRateLimiter_DifferentMethods(t *testing.T) {
 	client, _ := setupTestRedis(t)
 
-
 	logger := zaptest.NewLogger(t)
 	config := RateLimiterConfig{
 		RequestsPerSecond: 2,
-		WindowSeconds:     1,
+		BurstCapacity:     10,  // Adequate burst capacity
 		Enabled:           true,
 	}
 
@@ -241,11 +235,10 @@ func TestRateLimiter_DifferentMethods(t *testing.T) {
 func TestRateLimiter_WindowExpiry(t *testing.T) {
 	client, mr := setupTestRedis(t)
 
-
 	logger := zaptest.NewLogger(t)
 	config := RateLimiterConfig{
 		RequestsPerSecond: 2,
-		WindowSeconds:     2,
+		BurstCapacity:     4,
 		Enabled:           true,
 	}
 
@@ -271,8 +264,8 @@ func TestRateLimiter_WindowExpiry(t *testing.T) {
 	require.Error(t, err)
 
 	// Verify TTL is set on the key
-	key := "ratelimit:/user.UserService/GetUser:127.0.0.1:12345"
+	key := "ratelimit:tb:/user.UserService/GetUser:127.0.0.1:12345"
 	ttl := mr.TTL(key)
 	assert.Greater(t, ttl.Seconds(), 0.0)
-	assert.LessOrEqual(t, ttl.Seconds(), 2.0)
+	assert.LessOrEqual(t, ttl.Seconds(), 60.0) // TTL should be ~60 seconds
 }
